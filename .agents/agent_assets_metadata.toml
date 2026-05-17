@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "telLDHCP7T_kXeshBB7PK"
+uri = "file://artifacts/job-hunter-ai/assets/images/icon.png"
+type = "image"
+title = "generated_image"

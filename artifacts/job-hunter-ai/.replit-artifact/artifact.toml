@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "JobHunter AI"
+version = "1.0.0"
+id = "artifacts/job-hunter-ai"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 21280
+
+[services.development]
+run = "pnpm --filter @workspace/job-hunter-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/job-hunter-ai", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/job-hunter-ai", "run", "serve" ]
+
+[services.env]
+PORT = "21280"
+BASE_PATH = "/"
