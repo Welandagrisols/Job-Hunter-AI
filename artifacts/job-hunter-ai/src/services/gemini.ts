@@ -97,16 +97,31 @@ async function callGemini(prompt: string): Promise<string> {
   }
   _lastCallTime = Date.now();
 
-  const RETRY_DELAYS = [50000, 70000, 90000];
+  const RETRY_DELAYS = [50000, 70000];
 
   let response = await callGeminiOnce(apiKey, prompt);
 
-  for (const delay of RETRY_DELAYS) {
-    if (response.status !== 429) break;
-    await sleepWithCountdown(delay, (s) => `Rate limited — retrying in ${s}s...`);
-    notifyStatus("Retrying...");
-    _lastCallTime = Date.now();
-    response = await callGeminiOnce(apiKey, prompt);
+  if (response.status === 429) {
+    const errBody = await response.json().catch(() => ({}));
+    const errMsg: string = errBody.error?.message || "";
+    const isQuotaExhausted =
+      errMsg.includes("free_tier") ||
+      errMsg.includes("limit: 0") ||
+      errMsg.toLowerCase().includes("quota exceeded");
+
+    if (isQuotaExhausted) {
+      throw new Error(
+        "Your Gemini free tier quota is exhausted. Please wait a few minutes and try again, or add a paid API key in Settings for higher limits."
+      );
+    }
+
+    for (const delay of RETRY_DELAYS) {
+      await sleepWithCountdown(delay, (s) => `Rate limited — retrying in ${s}s...`);
+      notifyStatus("Retrying...");
+      _lastCallTime = Date.now();
+      response = await callGeminiOnce(apiKey, prompt);
+      if (response.status !== 429) break;
+    }
   }
 
   if (!response.ok) {
@@ -117,7 +132,7 @@ async function callGemini(prompt: string): Promise<string> {
     }
     if (response.status === 429) {
       throw new Error(
-        "Your Gemini free tier quota is exhausted. Please wait a few minutes before trying again, or add a paid API key in Settings for higher limits."
+        "Rate limit still active. Please wait a minute before trying again."
       );
     }
     throw new Error(msg || "Gemini API error. Check your API key in Settings.");
