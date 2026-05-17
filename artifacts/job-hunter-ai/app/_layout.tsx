@@ -1,14 +1,7 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import * as Font from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -48,31 +41,9 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [ready, setReady] = useState(false);
-
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setReady(true);
-      SplashScreen.hideAsync().catch(() => {});
-    }, 4000);
-
-    Font.loadAsync({
-      Inter_400Regular,
-      Inter_500Medium,
-      Inter_600SemiBold,
-      Inter_700Bold,
-    })
-      .catch(() => {})
-      .finally(() => {
-        clearTimeout(timeout);
-        setReady(true);
-        SplashScreen.hideAsync().catch(() => {});
-      });
-
-    return () => clearTimeout(timeout);
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
-
-  if (!ready) return null;
 
   return (
     <SafeAreaProvider>
