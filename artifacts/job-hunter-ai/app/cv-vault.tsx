@@ -18,6 +18,7 @@ export default function CVVaultScreen() {
   const [label, setLabel] = useState("My CV");
   const [saving, setSaving] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [showPdfHelp, setShowPdfHelp] = useState(false);
 
   const load = async () => {
     const data = await db.getCVVault();
@@ -40,7 +41,7 @@ export default function CVVaultScreen() {
     await load();
     setEditing(false);
     setSaving(false);
-    Alert.alert("Saved!", "Your CV has been saved to the vault. All AI features will now use your real CV.");
+    Alert.alert("Saved!", "Your CV is now in the vault. All AI features will use your real experience.");
   };
 
   const restoreVersion = (vCvText: string, vLabel: string) => {
@@ -87,12 +88,12 @@ export default function CVVaultScreen() {
         />
         <View style={styles.statusInfo}>
           <Text style={styles.statusTitle}>
-            {hasCV ? "CV Loaded ✓" : "No CV saved yet"}
+            {hasCV ? "CV Loaded" : "No CV saved yet"}
           </Text>
           <Text style={styles.statusSubtitle}>
             {hasCV
-              ? `Last updated: ${format(new Date(vault!.lastUpdated!), "MMM d, yyyy")}`
-              : "Paste your CV to make AI writing more accurate"}
+              ? `Last updated: ${format(new Date(vault!.lastUpdated!), "MMM d, yyyy")} · ${vault!.cvText.length} characters`
+              : "Add your CV to make all AI writing accurate to your real experience"}
           </Text>
         </View>
       </View>
@@ -101,9 +102,51 @@ export default function CVVaultScreen() {
       <View style={styles.infoBanner}>
         <Ionicons name="bulb-outline" size={16} color={theme.colors.accent.cyan} />
         <Text style={styles.infoText}>
-          Once saved, all AI features (cover letters, emails, CV tailoring) will use your actual experience instead of a generic profile.
+          Once saved, cover letters, application emails, and CV tailoring will all use your real skills and experience instead of a generic profile.
         </Text>
       </View>
+
+      {/* PDF Help */}
+      {(!hasCV || editing) && (
+        <TouchableOpacity
+          style={styles.pdfHelpToggle}
+          onPress={() => setShowPdfHelp(!showPdfHelp)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="document-outline" size={16} color={theme.colors.accent.cyan} />
+          <Text style={styles.pdfHelpToggleText}>How to copy text from your PDF CV</Text>
+          <Ionicons
+            name={showPdfHelp ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={theme.colors.accent.cyan}
+          />
+        </TouchableOpacity>
+      )}
+
+      {showPdfHelp && (
+        <View style={styles.pdfHelpCard}>
+          <Text style={styles.pdfHelpTitle}>Getting text from your PDF</Text>
+          {[
+            { num: "1", text: "Open your CV PDF in any PDF viewer (Google Drive, WPS Office, Adobe, etc.)" },
+            { num: "2", text: 'Tap "Select All" or long-press to start selecting text' },
+            { num: "3", text: 'Tap "Copy" or "Select All" from the menu' },
+            { num: "4", text: "Come back here and paste into the box below" },
+          ].map(step => (
+            <View key={step.num} style={styles.pdfStep}>
+              <View style={styles.pdfStepNum}>
+                <Text style={styles.pdfStepNumText}>{step.num}</Text>
+              </View>
+              <Text style={styles.pdfStepText}>{step.text}</Text>
+            </View>
+          ))}
+          <View style={styles.pdfNote}>
+            <Ionicons name="information-circle-outline" size={14} color={theme.colors.text.muted} />
+            <Text style={styles.pdfNoteText}>
+              Plain text works best. Tables and columns may not copy perfectly — just paste what you have, the AI handles it well.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* CV Editor */}
       {(!hasCV || editing) && (
@@ -145,7 +188,11 @@ Soil analysis, Fertilizer recommendations...`}
               multiline
               textAlignVertical="top"
             />
-            <Text style={styles.charCount}>{cvText.length} characters</Text>
+            <Text style={styles.charCount}>
+              {cvText.length > 0
+                ? `${cvText.length} characters — ${cvText.length < 500 ? "too short, add more detail" : cvText.length < 1500 ? "good" : "great"}`
+                : "0 characters"}
+            </Text>
           </View>
 
           <View style={styles.btnRow}>
@@ -238,6 +285,16 @@ const styles = StyleSheet.create({
   statusSubtitle: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm, marginTop: 2 },
   infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.sm, marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: theme.colors.accent.cyanDim, borderRadius: theme.radius.md, padding: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.accent.cyan + "33" },
   infoText: { flex: 1, color: theme.colors.accent.cyan, fontSize: theme.font.sizes.sm, lineHeight: 18 },
+  pdfHelpToggle: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm, backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.accent.cyan + "33" },
+  pdfHelpToggleText: { flex: 1, color: theme.colors.accent.cyan, fontSize: theme.font.sizes.sm, fontWeight: theme.font.weights.medium },
+  pdfHelpCard: { marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.bg.border, gap: theme.spacing.sm },
+  pdfHelpTitle: { color: theme.colors.text.primary, fontWeight: theme.font.weights.semibold, marginBottom: 4 },
+  pdfStep: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.sm },
+  pdfStepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: theme.colors.accent.cyanDim, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  pdfStepNumText: { color: theme.colors.accent.cyan, fontSize: theme.font.sizes.xs, fontWeight: theme.font.weights.bold },
+  pdfStepText: { flex: 1, color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm, lineHeight: 20 },
+  pdfNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 4, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: theme.colors.bg.border },
+  pdfNoteText: { flex: 1, color: theme.colors.text.muted, fontSize: theme.font.sizes.xs, lineHeight: 16 },
   editorContainer: { paddingHorizontal: theme.spacing.md, gap: theme.spacing.md },
   field: { gap: theme.spacing.xs },
   fieldLabel: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm, fontWeight: theme.font.weights.medium },

@@ -1,6 +1,7 @@
 import { aiService } from "./gemini";
 
 const CORS_PROXY = "https://api.allorigins.win/get?url=";
+const FETCH_TIMEOUT_MS = 12000;
 
 export const urlParser = {
   async parseFromUrl(url: string): Promise<ParsedJob> {
@@ -12,7 +13,7 @@ export const urlParser = {
     const rawText = await fetchPageText(url);
 
     if (!rawText || rawText.length < 100) {
-      throw new Error("Could not fetch job page. Try pasting the job description text directly instead.");
+      throw new Error("Could not fetch the job page. Try switching to 'Paste Text' and pasting the job description directly.");
     }
 
     const extracted = await aiService.parseJobDetails(rawText.slice(0, 4000));
@@ -36,27 +37,35 @@ export const urlParser = {
   },
 };
 
+function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
 async function fetchPageText(url: string): Promise<string> {
   try {
-    const directResponse = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
-
-    if (directResponse.ok) {
-      const html = await directResponse.text();
+    if (response.ok) {
+      const html = await response.text();
       return stripHtml(html);
     }
   } catch {
-    // Direct fetch failed, try proxy
+    // Direct fetch failed (CORS or network), try proxy
   }
 
   try {
     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
-    const response = await fetch(proxyUrl);
+    const response = await fetchWithTimeout(proxyUrl);
     const data = await response.json();
     return stripHtml(data.contents || "");
-  } catch {
-    throw new Error("Could not fetch the job page. Please paste the job description text directly.");
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      throw new Error("The request timed out. The job site may be slow. Try pasting the job text directly.");
+    }
+    throw new Error("Could not fetch the job page. Please paste the job description text directly instead.");
   }
 }
 

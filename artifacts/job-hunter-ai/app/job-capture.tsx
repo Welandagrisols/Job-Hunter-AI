@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, ActivityIndicator, Alert, Clipboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { urlParser, ParsedJob } from "@/src/services/urlParser";
 import { db } from "@/src/services/storage";
-import { aiService } from "@/src/services/gemini";
+import { aiService, getGeminiApiKey } from "@/src/services/gemini";
 import { theme } from "@/src/theme";
 
 type InputMode = "url" | "text";
@@ -15,7 +16,7 @@ type InputMode = "url" | "text";
 export default function JobCaptureScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ prefillUrl?: string }>();
-  const [inputMode, setInputMode] = useState<InputMode>(params.prefillUrl ? "url" : "url");
+  const [inputMode, setInputMode] = useState<InputMode>("url");
   const [url, setUrl] = useState(params.prefillUrl || "");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,11 +26,32 @@ export default function JobCaptureScreen() {
   const [generatedEmail, setGeneratedEmail] = useState("");
   const [generatedCoverLetter, setGeneratedCoverLetter] = useState("");
   const [saving, setSaving] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    getGeminiApiKey().then(k => setHasApiKey(!!k));
+  }, []));
 
   const parse = async () => {
+    const key = await getGeminiApiKey();
+    if (!key) {
+      Alert.alert(
+        "Gemini API Key Required",
+        "To extract job details, you need a free Gemini API key. It takes 2 minutes to set up.",
+        [
+          { text: "Not Now", style: "cancel" },
+          { text: "Go to Settings", onPress: () => router.push("/(tabs)/settings") },
+        ]
+      );
+      return;
+    }
+
     const input = inputMode === "url" ? url.trim() : text.trim();
     if (!input) {
-      Alert.alert("Empty input", inputMode === "url" ? "Please paste a job URL" : "Please paste job ad text");
+      Alert.alert(
+        "Empty input",
+        inputMode === "url" ? "Please paste a job URL first" : "Please paste job ad text first"
+      );
       return;
     }
 
@@ -43,9 +65,19 @@ export default function JobCaptureScreen() {
       const result = inputMode === "url"
         ? await urlParser.parseFromUrl(input)
         : await urlParser.parseFromText(input);
+      setLoadingStep("Parsing with AI...");
       setParsed(result);
     } catch (err: any) {
-      Alert.alert("Parse Error", err.message || "Could not parse job. Try pasting the text directly.");
+      Alert.alert(
+        "Could Not Extract",
+        err.message || "Try switching to 'Paste Text' and pasting the job description directly.",
+        inputMode === "url"
+          ? [
+              { text: "OK", style: "cancel" },
+              { text: "Switch to Paste Text", onPress: () => setInputMode("text") },
+            ]
+          : undefined
+      );
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -97,7 +129,7 @@ export default function JobCaptureScreen() {
         notes: `Source: ${parsed.sourceName}`,
       });
       Alert.alert(
-        "Saved! ✅",
+        "Saved!",
         "Application added to your tracker.",
         [
           { text: "View Applications", onPress: () => router.push("/(tabs)/applications") },
@@ -122,6 +154,22 @@ export default function JobCaptureScreen() {
           <Text style={styles.subtitle}>Paste URL or job ad → AI does the rest</Text>
         </View>
       </View>
+
+      {/* API Key warning banner */}
+      {hasApiKey === false && (
+        <TouchableOpacity
+          style={styles.warningBanner}
+          onPress={() => router.push("/(tabs)/settings")}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="key-outline" size={18} color={theme.colors.accent.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.warningTitle}>Gemini API Key Required</Text>
+            <Text style={styles.warningSubtitle}>Tap here to add your free API key in Settings</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.accent.orange} />
+        </TouchableOpacity>
+      )}
 
       {/* Input mode toggle */}
       <View style={styles.modeToggle}>
@@ -152,6 +200,16 @@ export default function JobCaptureScreen() {
         </ScrollView>
       )}
 
+      {/* Paste Text tip */}
+      {inputMode === "text" && (
+        <View style={styles.tipBanner}>
+          <Ionicons name="information-circle-outline" size={16} color={theme.colors.accent.cyan} />
+          <Text style={styles.tipText}>
+            Open the job page, select all the text, copy it, then paste here. Works even when URLs fail.
+          </Text>
+        </View>
+      )}
+
       {/* Input */}
       <View style={styles.inputContainer}>
         {inputMode === "url" ? (
@@ -179,14 +237,20 @@ export default function JobCaptureScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.parseBtn, loading && styles.parseBtnDisabled]}
+          style={[styles.parseBtn, (loading || hasApiKey === false) && styles.parseBtnDisabled]}
           onPress={parse}
           disabled={loading}
         >
           {loading ? (
-            <><ActivityIndicator color={theme.colors.bg.primary} size="small" /><Text style={styles.parseBtnText}>{loadingStep}</Text></>
+            <>
+              <ActivityIndicator color={theme.colors.bg.primary} size="small" />
+              <Text style={styles.parseBtnText}>{loadingStep || "Working..."}</Text>
+            </>
           ) : (
-            <><Ionicons name="scan-outline" size={18} color={theme.colors.bg.primary} /><Text style={styles.parseBtnText}>Extract Job Details</Text></>
+            <>
+              <Ionicons name="scan-outline" size={18} color={theme.colors.bg.primary} />
+              <Text style={styles.parseBtnText}>Extract Job Details</Text>
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -311,6 +375,11 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: theme.radius.full, backgroundColor: theme.colors.bg.card, alignItems: "center", justifyContent: "center" },
   title: { fontSize: theme.font.sizes.xxxl, fontWeight: theme.font.weights.bold, color: theme.colors.text.primary },
   subtitle: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm, marginTop: 4 },
+  warningBanner: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: "#2a1f0e", borderRadius: theme.radius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.accent.orange + "55" },
+  warningTitle: { color: theme.colors.accent.orange, fontWeight: theme.font.weights.semibold, fontSize: theme.font.sizes.sm },
+  warningSubtitle: { color: theme.colors.text.muted, fontSize: theme.font.sizes.xs, marginTop: 2 },
+  tipBanner: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.sm, marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm, backgroundColor: theme.colors.accent.cyanDim, borderRadius: theme.radius.md, padding: theme.spacing.sm, borderWidth: 1, borderColor: theme.colors.accent.cyan + "33" },
+  tipText: { flex: 1, color: theme.colors.accent.cyan, fontSize: theme.font.sizes.xs, lineHeight: 16 },
   modeToggle: { flexDirection: "row", marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.full, padding: 4, borderWidth: 1, borderColor: theme.colors.bg.border },
   modeBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: theme.spacing.sm, borderRadius: theme.radius.full },
   modeBtnActive: { backgroundColor: theme.colors.accent.cyan },
