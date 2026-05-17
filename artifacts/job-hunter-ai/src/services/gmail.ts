@@ -1,7 +1,6 @@
 import * as AuthSession from "expo-auth-session";
 import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
-import { Alert } from "react-native";
 import { CONFIG } from "../config";
 import { aiService } from "./gemini";
 import { db } from "./storage";
@@ -15,13 +14,24 @@ const GMAIL_SCOPES = [
 ];
 const STORE_KEY = "gmail_tokens";
 
+function getRedirectUri(): string {
+  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME || "";
+  if (expoUsername) {
+    return `https://auth.expo.io/@${expoUsername}/job-hunter-ai`;
+  }
+  return AuthSession.makeRedirectUri({ scheme: "jobhunterai" });
+}
+
+export function getOAuthRedirectUri(): string {
+  return getRedirectUri();
+}
+
 export const gmailService = {
   async signIn(): Promise<boolean> {
     try {
       if (!CONFIG.GOOGLE_CLIENT_ID) return false;
 
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: "jobhunterai" });
-      Alert.alert("Debug — copy this URI", redirectUri);
+      const redirectUri = getRedirectUri();
       const discovery = {
         authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
@@ -33,10 +43,11 @@ export const gmailService = {
         redirectUri,
         responseType: AuthSession.ResponseType.Code,
         usePKCE: true,
-        extraParams: { prompt: "select_account" },
+        extraParams: { prompt: "select_account", access_type: "offline" },
       });
 
       const result = await request.promptAsync(discovery);
+
       if (result.type === "success" && result.params.code) {
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
@@ -44,6 +55,7 @@ export const gmailService = {
           body: new URLSearchParams({
             code: result.params.code,
             client_id: CONFIG.GOOGLE_CLIENT_ID,
+            client_secret: CONFIG.GOOGLE_CLIENT_SECRET,
             redirect_uri: redirectUri,
             grant_type: "authorization_code",
             code_verifier: request.codeVerifier || "",
@@ -54,9 +66,11 @@ export const gmailService = {
           await SecureStore.setItemAsync(STORE_KEY, JSON.stringify(tokens));
           return true;
         }
+        console.error("[Gmail] Token exchange failed:", tokens);
       }
       return false;
-    } catch {
+    } catch (err) {
+      console.error("[Gmail] signIn error:", err);
       return false;
     }
   },
@@ -88,6 +102,7 @@ export const gmailService = {
       body: new URLSearchParams({
         refresh_token: tokens.refresh_token,
         client_id: CONFIG.GOOGLE_CLIENT_ID,
+        client_secret: CONFIG.GOOGLE_CLIENT_SECRET,
         grant_type: "refresh_token",
       }).toString(),
     });
@@ -175,7 +190,8 @@ export const gmailService = {
         newCount++;
       }
       return newCount;
-    } catch {
+    } catch (err) {
+      console.error("[Gmail] checkForNewEmails error:", err);
       return 0;
     }
   },

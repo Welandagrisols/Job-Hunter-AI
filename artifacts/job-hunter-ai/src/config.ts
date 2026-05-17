@@ -1,5 +1,6 @@
 export const CONFIG = {
   GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "",
+  GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || "",
 
   RECRUITER_KEYWORDS: [
     "application",
