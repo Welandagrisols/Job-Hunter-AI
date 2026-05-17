@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const GEMINI_KEY_STORAGE = "jh_gemini_api_key";
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
 
 const DEFAULT_PROFILE = `
 Name: Wesley Kipkemoi Koech
@@ -45,13 +45,10 @@ export async function getGeminiApiKey(): Promise<string> {
   return getApiKey();
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = await getApiKey();
-  if (!apiKey) {
-    throw new Error("Gemini API key not configured. Go to Settings to add your free API key.");
-  }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  const response = await fetch(`${GEMINI_API_BASE}?key=${apiKey}`, {
+async function callGeminiOnce(apiKey: string, prompt: string): Promise<Response> {
+  return fetch(`${GEMINI_API_BASE}?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -62,6 +59,20 @@ async function callGemini(prompt: string): Promise<string> {
       },
     }),
   });
+}
+
+async function callGemini(prompt: string): Promise<string> {
+  const apiKey = await getApiKey();
+  if (!apiKey) {
+    throw new Error("Gemini API key not configured. Go to Settings to add your free API key.");
+  }
+
+  let response = await callGeminiOnce(apiKey, prompt);
+
+  if (response.status === 429) {
+    await sleep(8000);
+    response = await callGeminiOnce(apiKey, prompt);
+  }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -70,7 +81,7 @@ async function callGemini(prompt: string): Promise<string> {
       throw new Error("Invalid Gemini API key. Please update it in Settings.");
     }
     if (response.status === 429) {
-      throw new Error("Gemini rate limit reached. Please wait a moment and try again.");
+      throw new Error("Rate limit hit. Please wait 30 seconds and try again.");
     }
     throw new Error(msg || "Gemini API error. Check your API key in Settings.");
   }
