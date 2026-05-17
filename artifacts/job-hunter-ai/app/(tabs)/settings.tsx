@@ -29,6 +29,7 @@ export default function SettingsScreen() {
   const [backgroundEnabled, setBackgroundEnabled] = useState(false);
   const [showGmailSetup, setShowGmailSetup] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
+  const [testingKey, setTestingKey] = useState(false);
 
   const loadStatus = useCallback(async () => {
     const [gmail, savedKey, bgEnabled] = await Promise.all([
@@ -94,6 +95,45 @@ export default function SettingsScreen() {
     setSavingKey(false);
     setShowGeminiInput(false);
     Alert.alert("Saved!", "Gemini API key saved. All AI features are now active.");
+  };
+
+  const testApiKey = async () => {
+    setTestingKey(true);
+    try {
+      const key = await getGeminiApiKey();
+      if (!key) {
+        Alert.alert("No Key Found", "Please add your Gemini API key first.");
+        return;
+      }
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Reply with only the word: OK" }] }],
+            generationConfig: { maxOutputTokens: 5 },
+          }),
+        }
+      );
+      if (response.ok) {
+        Alert.alert("API Key Working", "Your Gemini API key is valid and connected successfully. All AI features are active.");
+      } else {
+        const err = await response.json().catch(() => ({}));
+        const msg = err.error?.message || `Error ${response.status}`;
+        if (response.status === 400 || msg.includes("API_KEY_INVALID")) {
+          Alert.alert("Invalid Key", "This API key is not valid. Please check it and try again.\n\nGet a free key at aistudio.google.com");
+        } else if (response.status === 403) {
+          Alert.alert("Key Rejected", "The API key was rejected. Make sure the Gemini API is enabled in Google AI Studio.");
+        } else {
+          Alert.alert("Test Failed", msg);
+        }
+      }
+    } catch {
+      Alert.alert("Connection Error", "Could not reach Gemini. Check your internet connection and try again.");
+    } finally {
+      setTestingKey(false);
+    }
   };
 
   const toggleBackground = async () => {
@@ -167,6 +207,20 @@ export default function SettingsScreen() {
                   {geminiConfigured ? "Update Gemini API Key" : "Add Gemini API Key"}
                 </Text>
               </TouchableOpacity>
+              {geminiConfigured && (
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, padding: 12, borderWidth: 1, borderColor: colors.border, opacity: testingKey ? 0.6 : 1 }}
+                  onPress={testApiKey}
+                  disabled={testingKey}
+                >
+                  {testingKey
+                    ? <ActivityIndicator size="small" color={colors.primary} />
+                    : <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />}
+                  <Text style={{ color: colors.primary, fontWeight: "600" }}>
+                    {testingKey ? "Testing..." : "Test Connection"}
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 8 }}
                 onPress={() => Linking.openURL("https://aistudio.google.com/app/apikey")}
