@@ -102,12 +102,21 @@ export default function ApplicationsScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={{ paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>Applications</Text>
-        <TouchableOpacity
-          style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
-          onPress={() => router.push("/add-application")}
-        >
-          <Ionicons name="add" size={22} color={colors.primaryForeground} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 }}
+            onPress={() => router.push("/smart-import")}
+          >
+            <Ionicons name="sparkles" size={15} color={colors.primary} />
+            <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 13 }}>Smart Import</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
+            onPress={() => router.push("/add-application")}
+          >
+            <Ionicons name="add" size={22} color={colors.primaryForeground} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginBottom: 10, backgroundColor: colors.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border }}>

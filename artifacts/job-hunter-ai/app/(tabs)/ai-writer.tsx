@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, ActivityIndicator, Share, Alert, Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams } from "expo-router";
 import { aiService } from "@/src/services/claude";
 import { useColors } from "@/hooks/useColors";
 
@@ -22,14 +23,21 @@ export default function AIWriterScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const params = useLocalSearchParams<{ prefill_company?: string; prefill_role?: string; prefill_description?: string }>();
 
-  const [mode, setMode] = useState<WritingMode>("email");
+  const [mode, setMode] = useState<WritingMode>("cover_letter");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [daysSince, setDaysSince] = useState("7");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (params.prefill_company) setCompany(params.prefill_company);
+    if (params.prefill_role) setRole(params.prefill_role);
+    if (params.prefill_description) setJobDescription(params.prefill_description);
+  }, [params.prefill_company, params.prefill_role, params.prefill_description]);
 
   const generate = async () => {
     if (!company.trim() && mode !== "cv_tailor") {
