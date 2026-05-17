@@ -20,8 +20,8 @@ export const gmailService = {
     try {
       if (!CONFIG.GOOGLE_CLIENT_ID) return false;
 
-      const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
-      Alert.alert("Debug: Redirect URI", redirectUri);
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: "jobhunterai" });
+      Alert.alert("Debug — copy this URI", redirectUri);
       const discovery = {
         authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
         tokenEndpoint: "https://oauth2.googleapis.com/token",
