@@ -97,7 +97,7 @@ async function callGemini(prompt: string): Promise<string> {
   }
   _lastCallTime = Date.now();
 
-  const RETRY_DELAYS = [20000, 40000];
+  const RETRY_DELAYS = [50000, 70000, 90000];
 
   let response = await callGeminiOnce(apiKey, prompt);
 
@@ -116,8 +116,9 @@ async function callGemini(prompt: string): Promise<string> {
       throw new Error("Invalid Gemini API key. Please update it in Settings.");
     }
     if (response.status === 429) {
-      const detail = msg ? ` (${msg})` : "";
-      throw new Error(`Rate limit still active after retrying${detail}. Please wait a minute before trying again.`);
+      throw new Error(
+        "Your Gemini free tier quota is exhausted. Please wait a few minutes before trying again, or add a paid API key in Settings for higher limits."
+      );
     }
     throw new Error(msg || "Gemini API error. Check your API key in Settings.");
   }
