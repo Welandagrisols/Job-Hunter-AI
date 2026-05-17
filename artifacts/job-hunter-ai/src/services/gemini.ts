@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const GEMINI_KEY_STORAGE = "jh_gemini_api_key";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-const WESLEY_PROFILE = `
+const DEFAULT_PROFILE = `
 Name: Wesley Kipkemoi Koech
 Profession: Agronomist & Soil Scientist
 Location: Nairobi, Kenya
@@ -18,6 +18,19 @@ Skills:
 - Crop management advisory
 Industry: Agriculture, Agri-tech, East African agri-development
 `;
+
+async function getUserProfile(): Promise<string> {
+  try {
+    const data = await AsyncStorage.getItem("@jobhunter:cv_vault");
+    if (data) {
+      const vault = JSON.parse(data);
+      if (vault.cvText && vault.cvText.length > 50) {
+        return vault.cvText;
+      }
+    }
+  } catch {}
+  return DEFAULT_PROFILE;
+}
 
 async function getApiKey(): Promise<string> {
   const stored = await AsyncStorage.getItem(GEMINI_KEY_STORAGE);
@@ -51,8 +64,15 @@ async function callGemini(prompt: string): Promise<string> {
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || "Gemini API error. Check your API key.");
+    const err = await response.json().catch(() => ({}));
+    const msg = err.error?.message || "";
+    if (msg.includes("API_KEY_INVALID") || response.status === 400) {
+      throw new Error("Invalid Gemini API key. Please update it in Settings.");
+    }
+    if (response.status === 429) {
+      throw new Error("Gemini rate limit reached. Please wait a moment and try again.");
+    }
+    throw new Error(msg || "Gemini API error. Check your API key in Settings.");
   }
 
   const data = await response.json();
@@ -105,6 +125,7 @@ Return this exact JSON structure:
     jobDescription: string,
     tone: "formal" | "confident" | "friendly" = "confident"
   ): Promise<string> {
+    const profile = await getUserProfile();
     const toneGuide = {
       formal: "formal and professional, traditional business language",
       confident: "confident and direct, identity-forward, no fluff",
@@ -112,10 +133,10 @@ Return this exact JSON structure:
     };
 
     return callGemini(`
-You are writing a job application email for Wesley Kipkemoi Koech.
+You are writing a job application email for the candidate described below.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Job Details:
 Company: ${company}
@@ -140,6 +161,7 @@ Write a complete application email body (not subject line).
     tone: "formal" | "confident" | "friendly" = "confident",
     length: "short" | "standard" | "full" = "standard"
   ): Promise<string> {
+    const profile = await getUserProfile();
     const lengthGuide = {
       short: "2 paragraphs, maximum 150 words",
       standard: "3-4 paragraphs, maximum 300 words",
@@ -147,10 +169,10 @@ Write a complete application email body (not subject line).
     };
 
     return callGemini(`
-Write a cover letter for Wesley Kipkemoi Koech.
+Write a cover letter for the candidate described below.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Job Details:
 Company: ${company}
@@ -161,18 +183,20 @@ Tone: ${tone}
 Length: ${lengthGuide[length]}
 
 Structure:
-- Opening: specific reason this role + company excites him
+- Opening: specific reason this role + company excites the candidate
 - Body: relevant experience proof points matching the JD
 - Closing: confident call to action
 `);
   },
 
   async tailorCVPoints(jobDescription: string, cvText?: string): Promise<string> {
-    const cvContext = cvText ? `\nUser's CV:\n${cvText}` : `\nProfile:\n${WESLEY_PROFILE}`;
+    const profile = cvText || await getUserProfile();
 
     return callGemini(`
 Given this job description, generate tailored CV content.
-${cvContext}
+
+Candidate profile / CV:
+${profile}
 
 Job Description:
 ${jobDescription}
@@ -202,6 +226,7 @@ KEYWORDS MISSING FROM YOUR CV:
     missingKeywords: string[];
     suggestions: string[];
   }> {
+    const profileToUse = (cvText && cvText.length > 50) ? cvText : await getUserProfile();
     const result = await callGemini(`
 Analyze how well this CV matches the job description. Return ONLY valid JSON, no markdown.
 
@@ -209,7 +234,7 @@ JOB DESCRIPTION:
 ${jobDescription}
 
 CV CONTENT:
-${cvText}
+${profileToUse}
 
 Return this exact JSON:
 {
@@ -232,18 +257,19 @@ Return this exact JSON:
     company: string,
     jobDescription: string
   ): Promise<string> {
+    const profile = await getUserProfile();
     return callGemini(`
-Generate interview preparation for Wesley Kipkemoi Koech applying for ${jobTitle} at ${company}.
+Generate interview preparation for a candidate applying for ${jobTitle} at ${company}.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Job Description: ${jobDescription}
 
 Format:
 LIKELY QUESTIONS & SUGGESTED ANSWERS:
 1. [question]
-   → ANSWER: [Wesley-specific answer using his real experience]
+   → ANSWER: [candidate-specific answer using their real experience]
 
 2. [question]
    → ANSWER: [answer]
@@ -266,17 +292,18 @@ SMART QUESTIONS TO ASK THE INTERVIEWER:
     company: string,
     role: string
   ): Promise<string> {
+    const profile = await getUserProfile();
     return callGemini(`
-Answer this job application form question for Wesley Kipkemoi Koech.
+Answer this job application form question for the candidate described below.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Company: ${company}
 Role: ${role}
 Question: ${question}
 
-Write a concise, specific answer (2-4 sentences) personalized to Wesley's actual experience.
+Write a concise, specific answer (2-4 sentences) personalized to the candidate's actual experience.
 Do not use generic answers.
 `);
   },
@@ -286,11 +313,12 @@ Do not use generic answers.
     role: string,
     daysSinceApplied: number
   ): Promise<string> {
+    const profile = await getUserProfile();
     return callGemini(`
-Write a short follow-up email for Wesley Kipkemoi Koech.
+Write a short follow-up email for the candidate described below.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Company: ${company}
 Role: ${role}
@@ -311,12 +339,16 @@ Rules:
     suggestedReply: string;
     urgency: "high" | "medium" | "low";
   }> {
+    const profile = await getUserProfile();
     const result = await callGemini(`
 Classify this recruiter email. Return ONLY valid JSON, no markdown.
 
 Company: ${company}
 Subject: ${subject}
 Body: ${body}
+
+Candidate profile (for suggested reply context):
+${profile}
 
 Classifications:
 - interview_invite: They want to schedule an interview
@@ -330,7 +362,7 @@ Return this exact JSON:
 {
   "classification": "interview_invite",
   "summary": "1-2 sentence plain English summary",
-  "suggestedReply": "A professional reply Wesley should send",
+  "suggestedReply": "A professional reply the candidate should send",
   "urgency": "high"
 }`);
 
@@ -348,11 +380,12 @@ Return this exact JSON:
   },
 
   async scoreJobRelevance(jobList: string): Promise<{ score: number; reason: string }[]> {
+    const profile = await getUserProfile();
     const result = await callGemini(`
-Score these job listings for relevance to Wesley Kipkemoi Koech.
+Score these job listings for relevance to the candidate below.
 
-Wesley's profile:
-${WESLEY_PROFILE}
+Candidate profile:
+${profile}
 
 Score each job 0-100 for relevance. Return ONLY valid JSON array, no markdown.
 
@@ -360,7 +393,7 @@ Jobs:
 ${jobList}
 
 Return array matching job count exactly:
-[{"score": 85, "reason": "Direct agronomist role in Kenya"}, ...]`);
+[{"score": 85, "reason": "Direct match for candidate's field and location"}, ...]`);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();

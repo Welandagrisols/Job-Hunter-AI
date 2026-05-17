@@ -396,7 +396,6 @@ export default function SettingsScreen() {
 
       <View style={{ alignItems: "center", padding: 16 }}>
         <Text style={{ color: colors.textMuted, fontSize: 12, marginBottom: 2 }}>JobHunter AI v2.0.0</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12 }}>Built for Wesley Kipkemoi Koech</Text>
         <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4 }}>AI powered by Google Gemini 2.0 Flash</Text>
       </View>
     </ScrollView>

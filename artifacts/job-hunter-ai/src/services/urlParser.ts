@@ -1,7 +1,11 @@
 import { aiService } from "./gemini";
 
-const CORS_PROXY = "https://api.allorigins.win/get?url=";
 const FETCH_TIMEOUT_MS = 12000;
+
+const CORS_PROXIES = [
+  (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
 
 export const urlParser = {
   async parseFromUrl(url: string): Promise<ParsedJob> {
@@ -44,40 +48,61 @@ function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Respo
 }
 
 async function fetchPageText(url: string): Promise<string> {
+  // Try direct fetch first
   try {
     const response = await fetchWithTimeout(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
     });
     if (response.ok) {
       const html = await response.text();
-      return stripHtml(html);
+      const text = stripHtml(html);
+      if (text.length >= 100) return text;
     }
   } catch {
-    // Direct fetch failed (CORS or network), try proxy
+    // Direct fetch failed (CORS or network), try proxies below
   }
 
-  try {
-    const proxyUrl = CORS_PROXY + encodeURIComponent(url);
-    const response = await fetchWithTimeout(proxyUrl);
-    const data = await response.json();
-    return stripHtml(data.contents || "");
-  } catch (e: any) {
-    if (e?.name === "AbortError") {
-      throw new Error("The request timed out. The job site may be slow. Try pasting the job text directly.");
+  // Try each CORS proxy in sequence
+  for (const buildProxyUrl of CORS_PROXIES) {
+    try {
+      const proxyUrl = buildProxyUrl(url);
+      const response = await fetchWithTimeout(proxyUrl);
+      if (!response.ok) continue;
+
+      // allorigins returns JSON with a "contents" field; corsproxy returns HTML directly
+      const contentType = response.headers.get("content-type") || "";
+      let text: string;
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        text = stripHtml(data.contents || "");
+      } else {
+        const html = await response.text();
+        text = stripHtml(html);
+      }
+
+      if (text.length >= 100) return text;
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        throw new Error("The request timed out. The job site may be slow or blocking requests. Try pasting the job description text directly.");
+      }
+      // Try next proxy
     }
-    throw new Error("Could not fetch the job page. Please paste the job description text directly instead.");
   }
+
+  throw new Error("Could not fetch this job page. Please paste the job description text directly instead.");
 }
 
 function stripHtml(html: string): string {
   return html
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&nbsp;/g, " ")
+    .replace(/&#\d+;/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 5000);
