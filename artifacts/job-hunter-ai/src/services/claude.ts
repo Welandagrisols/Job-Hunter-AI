@@ -10,13 +10,14 @@ Skills: Soil fertility management & analysis, Fertilizer optimization & recommen
 Industry: Agriculture, Agri-tech, East African agri-development
 `;
 
-async function callClaude(systemPrompt: string, userMessage: string): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 1500): Promise<string> {
   const response = await fetch(`${getApiBase()}/api/claude`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
+      max_tokens: maxTokens,
     }),
   });
 
@@ -62,6 +63,45 @@ export const aiService = {
     return callClaude(
       `You are a professional email writer. Write polite, confident follow-up emails for Wesley Kipkemoi Koech.\n\nWesley's profile:\n${WESLEY_PROFILE}\n\nKeep follow-ups: short (3-4 sentences), polite but confident, reference the specific role, reaffirm interest, ask for status update.`,
       `Write a follow-up email for:\nCompany: ${company}\nRole: ${role}\nDays since application: ${daysSinceApplied}\n\nWrite just the email body.`
+    );
+  },
+
+  async analyzeKeywords(jobDescription: string): Promise<{
+    score: number;
+    total: number;
+    percentage: number;
+    matched: string[];
+    missing: string[];
+    recommendation: string;
+  }> {
+    const result = await callClaude(
+      `You are a resume keyword matcher. Compare a candidate's profile against a job description and return ONLY valid JSON, no markdown, no explanation.\n\nCandidate profile:\n${WESLEY_PROFILE}`,
+      `Analyse how well Wesley's profile matches this job description. Extract the 10-15 most important keywords/skills from the job description, then check which ones Wesley has.\n\nJob Description:\n${jobDescription}\n\nReturn JSON only:\n{\n  "matched": ["keyword1", "keyword2"],\n  "missing": ["keyword3", "keyword4"],\n  "recommendation": "2-3 sentence advice on how to strengthen the application or which gaps to address"\n}`,
+      800
+    );
+
+    try {
+      const clean = result.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      const total = (parsed.matched?.length || 0) + (parsed.missing?.length || 0);
+      const score = parsed.matched?.length || 0;
+      return {
+        score,
+        total,
+        percentage: total > 0 ? Math.round((score / total) * 100) : 0,
+        matched: parsed.matched || [],
+        missing: parsed.missing || [],
+        recommendation: parsed.recommendation || "",
+      };
+    } catch {
+      throw new Error("Could not analyse keywords. Please try again.");
+    }
+  },
+
+  async answerApplicationQuestion(question: string, company: string, role: string): Promise<string> {
+    return callClaude(
+      `You are an expert job application coach helping Wesley Kipkemoi Koech answer specific application form questions and essay prompts.\n\nWesley's profile:\n${WESLEY_PROFILE}\n\nGuidelines:\n- Answer in first person as Wesley\n- Be specific and genuine, referencing Wesley's real experience\n- Keep answers concise (150-250 words) unless the question demands more\n- Tailor to the specific company and role\n- Sound confident and natural, not robotic`,
+      `Answer this application question for a ${role} role at ${company}:\n\n"${question}"\n\nWrite Wesley's answer directly (do not include the question or any preamble).`
     );
   },
 
