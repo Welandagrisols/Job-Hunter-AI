@@ -39,6 +39,7 @@ export default function AIWriterScreen() {
   const [cvMatchResult, setCvMatchResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [hasCv, setHasCv] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
 
   useEffect(() => {
     db.getCVVault().then((vault) => setHasCv(!!vault.cvText));
@@ -47,20 +48,21 @@ export default function AIWriterScreen() {
     if (params.prefill_description) setJobDescription(params.prefill_description);
   }, [params.prefill_company, params.prefill_role, params.prefill_description]);
 
-  const resetResults = () => { setResult(""); setCvMatchResult(null); };
+  const resetResults = () => { setResult(""); setCvMatchResult(null); setGenError(null); };
 
   const generate = async () => {
+    setGenError(null);
     if (mode === "keyword_match") {
-      if (!jobDescription.trim()) { Alert.alert("Missing info", "Paste the job description"); return; }
+      if (!jobDescription.trim()) { setGenError("Please paste the job description first."); return; }
     } else if (mode === "qa") {
-      if (!question.trim()) { Alert.alert("Missing info", "Enter the application question"); return; }
+      if (!question.trim()) { setGenError("Please enter the application question first."); return; }
     } else if (mode === "follow_up") {
-      if (!company.trim()) { Alert.alert("Missing info", "Enter the company name"); return; }
+      if (!company.trim()) { setGenError("Please enter the company name."); return; }
     } else if (mode === "cv_tailor") {
-      if (!jobDescription.trim()) { Alert.alert("Missing info", "Paste the job description"); return; }
+      if (!jobDescription.trim()) { setGenError("Please paste the job description first."); return; }
     } else {
       if (!company.trim() || !jobDescription.trim()) {
-        Alert.alert("Missing info", "Enter company name and job description");
+        setGenError("Please enter both the company name and job description.");
         return;
       }
     }
@@ -88,7 +90,7 @@ export default function AIWriterScreen() {
         setResult(await aiService.generateFollowUp(company, role, parseInt(daysSince) || 7));
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to generate. Check your Gemini API key in Settings.");
+      setGenError(err.message || "Failed to generate. Check your Gemini API key in Settings.");
     } finally {
       setLoading(false);
     }
@@ -227,6 +229,20 @@ export default function AIWriterScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {genError && (
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#ff000018", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#ff000044", marginTop: 4 }}>
+            <Ionicons name="close-circle" size={18} color="#ff4444" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: "#ff4444", fontSize: 13, lineHeight: 18 }}>{genError}</Text>
+              {genError.includes("API key") && (
+                <TouchableOpacity onPress={() => router.push("/(tabs)/settings")} style={{ marginTop: 6 }}>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>→ Go to Settings to fix this</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       {cvMatchResult && (

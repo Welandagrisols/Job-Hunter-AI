@@ -27,6 +27,9 @@ export default function JobCaptureScreen() {
   const [generatedCoverLetter, setGeneratedCoverLetter] = useState("");
   const [saving, setSaving] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useFocusEffect(useCallback(() => {
     getGeminiApiKey().then(k => setHasApiKey(!!k));
@@ -57,6 +60,7 @@ export default function JobCaptureScreen() {
 
     setLoading(true);
     setParsed(null);
+    setParseError(null);
     setGeneratedEmail("");
     setGeneratedCoverLetter("");
 
@@ -68,16 +72,7 @@ export default function JobCaptureScreen() {
       setLoadingStep("Parsing with AI...");
       setParsed(result);
     } catch (err: any) {
-      Alert.alert(
-        "Could Not Extract",
-        err.message || "Try switching to 'Paste Text' and pasting the job description directly.",
-        inputMode === "url"
-          ? [
-              { text: "OK", style: "cancel" },
-              { text: "Switch to Paste Text", onPress: () => setInputMode("text") },
-            ]
-          : undefined
-      );
+      setParseError(err.message || "Could not extract job details. Try switching to 'Paste Text'.");
     } finally {
       setLoading(false);
       setLoadingStep("");
@@ -87,11 +82,12 @@ export default function JobCaptureScreen() {
   const generateEmail = async () => {
     if (!parsed) return;
     setGenerating("email");
+    setGenError(null);
     try {
       const email = await aiService.generateApplicationEmail(parsed.role, parsed.company, parsed.rawText, "confident");
       setGeneratedEmail(email);
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      setGenError(err.message || "Failed to generate email. Check your Gemini API key in Settings.");
     } finally {
       setGenerating(null);
     }
@@ -100,11 +96,12 @@ export default function JobCaptureScreen() {
   const generateCoverLetter = async () => {
     if (!parsed) return;
     setGenerating("cover");
+    setGenError(null);
     try {
       const letter = await aiService.generateCoverLetter(parsed.role, parsed.company, parsed.rawText, "confident", "standard");
       setGeneratedCoverLetter(letter);
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      setGenError(err.message || "Failed to generate cover letter. Check your Gemini API key in Settings.");
     } finally {
       setGenerating(null);
     }
@@ -113,6 +110,7 @@ export default function JobCaptureScreen() {
   const saveAndTrack = async () => {
     if (!parsed) return;
     setSaving(true);
+    setSaveSuccess(false);
     try {
       await db.addApplication({
         company: parsed.company || "Unknown Company",
@@ -128,16 +126,9 @@ export default function JobCaptureScreen() {
         application_email: generatedEmail,
         notes: `Source: ${parsed.sourceName}`,
       });
-      Alert.alert(
-        "Saved!",
-        "Application added to your tracker.",
-        [
-          { text: "View Applications", onPress: () => router.push("/(tabs)/applications") },
-          { text: "OK", onPress: () => router.back() },
-        ]
-      );
+      setSaveSuccess(true);
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      setGenError(err.message || "Could not save application.");
     } finally {
       setSaving(false);
     }
@@ -253,6 +244,21 @@ export default function JobCaptureScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {parseError && (
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#ff000018", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#ff000044" }}>
+            <Ionicons name="close-circle" size={18} color={theme.colors.accent.red || "#ff4444"} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: "#ff4444", fontWeight: "600", fontSize: 13, marginBottom: 4 }}>Could Not Extract</Text>
+              <Text style={{ color: "#ff7777", fontSize: 12, lineHeight: 18 }}>{parseError}</Text>
+              {inputMode === "url" && (
+                <TouchableOpacity onPress={() => { setInputMode("text"); setParseError(null); }} style={{ marginTop: 8 }}>
+                  <Text style={{ color: theme.colors.accent.cyan, fontSize: 12, fontWeight: "600" }}>→ Switch to Paste Text instead</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Parsed result */}
@@ -287,6 +293,25 @@ export default function JobCaptureScreen() {
               {parsed.requirements.length > 5 && (
                 <Text style={styles.moreText}>+{parsed.requirements.length - 5} more</Text>
               )}
+            </View>
+          )}
+
+          {genError && (
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#ff000018", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#ff000044" }}>
+              <Ionicons name="close-circle" size={18} color="#ff4444" style={{ marginTop: 1 }} />
+              <Text style={{ flex: 1, color: "#ff4444", fontSize: 13, lineHeight: 18 }}>{genError}</Text>
+            </View>
+          )}
+
+          {saveSuccess && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: theme.colors.accent.green + "22", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: theme.colors.accent.green + "55" }}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.accent.green} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.accent.green, fontWeight: "700", fontSize: 14 }}>Saved to Job Tracker!</Text>
+                <TouchableOpacity onPress={() => router.push("/(tabs)/applications")} style={{ marginTop: 4 }}>
+                  <Text style={{ color: theme.colors.accent.cyan, fontSize: 13 }}>View Applications →</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 

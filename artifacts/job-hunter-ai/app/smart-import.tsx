@@ -8,7 +8,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
-import { getApiBase } from "@/src/config";
+import { urlParser } from "@/src/services/urlParser";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
@@ -47,6 +47,8 @@ export default function SmartImportScreen() {
   const [requirements, setRequirements] = useState("");
   const [status, setStatus] = useState<JobApplication["status"]>("applied");
   const [saving, setSaving] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {
@@ -63,32 +65,29 @@ export default function SmartImportScreen() {
   const parseJob = async () => {
     const input = inputMode === "url" ? urlInput.trim() : textInput.trim();
     if (!input) {
-      Alert.alert("Nothing to parse", inputMode === "url" ? "Paste a job link first" : "Paste the job text first");
+      setParseError(inputMode === "url" ? "Please paste a job link first." : "Please paste the job text first.");
       return;
     }
     setParsing(true);
     setParsed(null);
+    setParseError(null);
+    setSaveSuccess(false);
     try {
-      const body = inputMode === "url" ? { url: input } : { text: input };
-      const resp = await fetch(`${getApiBase()}/api/parse-job`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || "Parsing failed");
+      const result = inputMode === "url"
+        ? await urlParser.parseFromUrl(input)
+        : await urlParser.parseFromText(input);
 
-      setParsed(data);
-      setCompany(data.company || "");
-      setRole(data.role || "");
-      setLocation(data.location || "");
-      setDeadline(data.deadline || "");
-      setContactEmail(data.contact_email || "");
-      setSalary(data.salary || "");
-      setJobDescription(data.job_description || "");
-      setRequirements(data.requirements || "");
+      setParsed(result as any);
+      setCompany(result.company || "");
+      setRole(result.role || "");
+      setLocation(result.location || "");
+      setDeadline(result.deadline || "");
+      setContactEmail(result.contactEmail || "");
+      setSalary(result.salary || "");
+      setJobDescription(result.responsibilities?.join("\n") || "");
+      setRequirements(result.requirements?.join("\n") || "");
     } catch (err: any) {
-      Alert.alert("Could not parse", err.message || "Try pasting the job text instead");
+      setParseError(err.message || "Could not parse the job. Try pasting the text directly.");
     } finally {
       setParsing(false);
     }
@@ -96,10 +95,11 @@ export default function SmartImportScreen() {
 
   const saveApplication = async (goToAIWriter = false) => {
     if (!company.trim() || !role.trim()) {
-      Alert.alert("Required", "Company and role are needed to save");
+      setParseError("Company name and job title are required to save.");
       return;
     }
     setSaving(true);
+    setParseError(null);
     try {
       const notes = [
         location && `Location: ${location}`,
@@ -129,12 +129,10 @@ export default function SmartImportScreen() {
           },
         });
       } else {
-        Alert.alert("Saved!", `Application to ${company} added.`, [
-          { text: "OK", onPress: () => router.back() },
-        ]);
+        setSaveSuccess(true);
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Could not save");
+      setParseError(err.message || "Could not save application.");
     } finally {
       setSaving(false);
     }
@@ -233,6 +231,32 @@ export default function SmartImportScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {parseError && (
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#ff000018", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#ff000044" }}>
+            <Ionicons name="close-circle" size={18} color="#ff4444" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: "#ff4444", fontSize: 13, lineHeight: 18 }}>{parseError}</Text>
+              {inputMode === "url" && (
+                <TouchableOpacity onPress={() => { setInputMode("text"); setParseError(null); }} style={{ marginTop: 6 }}>
+                  <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>→ Switch to Paste Text instead</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
+        {saveSuccess && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.green + "22", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.green + "55" }}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.green} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.green, fontWeight: "700", fontSize: 14 }}>Application Saved!</Text>
+              <TouchableOpacity onPress={() => router.push("/(tabs)/applications")} style={{ marginTop: 4 }}>
+                <Text style={{ color: colors.primary, fontSize: 13 }}>View in Applications →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {parsed && (
           <>
