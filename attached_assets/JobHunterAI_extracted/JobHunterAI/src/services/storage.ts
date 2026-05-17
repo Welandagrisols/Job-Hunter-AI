@@ -1,15 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// ============================================
+// LOCAL STORAGE SERVICE (No Supabase needed!)
+// All data stored on device
+// ============================================
+
 const KEYS = {
-  APPLICATIONS: "@jobhunter:applications",
-  ALERTS: "@jobhunter:alerts",
-  CV_VAULT: "@jobhunter:cv_vault",
+  APPLICATIONS: "jh_applications",
+  ALERTS: "jh_alerts",
+  CV_VAULT: "jh_cv_vault",
+  STATS: "jh_stats",
 };
 
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
+// Helpers
 async function getAll<T>(key: string): Promise<T[]> {
   try {
     const data = await AsyncStorage.getItem(key);
@@ -23,8 +26,14 @@ async function saveAll<T>(key: string, data: T[]): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(data));
 }
 
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+// ============================================
+// JOB APPLICATIONS
+// ============================================
 export const db = {
-  // ============ APPLICATIONS ============
   async getApplications(): Promise<JobApplication[]> {
     const apps = await getAll<JobApplication>(KEYS.APPLICATIONS);
     return apps.sort((a, b) =>
@@ -34,12 +43,11 @@ export const db = {
 
   async addApplication(app: Partial<JobApplication>): Promise<JobApplication> {
     const apps = await getAll<JobApplication>(KEYS.APPLICATIONS);
-    const now = new Date().toISOString();
     const newApp: JobApplication = {
       id: generateId(),
       company: app.company || "",
       role: app.role || "",
-      date_applied: app.date_applied || now,
+      date_applied: new Date().toISOString(),
       status: app.status || "applied",
       deadline: app.deadline,
       contact_email: app.contact_email,
@@ -50,11 +58,11 @@ export const db = {
       location: app.location,
       salary: app.salary,
       requirements: app.requirements || [],
-      timeline: [{ date: now, event: "Application created", type: "created" }],
-      created_at: now,
-      updated_at: now,
+      timeline: [{ date: new Date().toISOString(), event: "Application created", type: "created" }],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-    apps.unshift(newApp);
+    apps.push(newApp);
     await saveAll(KEYS.APPLICATIONS, apps);
     return newApp;
   },
@@ -64,6 +72,7 @@ export const db = {
     const idx = apps.findIndex((a) => a.id === id);
     if (idx === -1) throw new Error("Application not found");
 
+    // Add timeline event if status changed
     if (updates.status && updates.status !== apps[idx].status) {
       const timeline = apps[idx].timeline || [];
       timeline.push({
@@ -77,11 +86,6 @@ export const db = {
     apps[idx] = { ...apps[idx], ...updates, updated_at: new Date().toISOString() };
     await saveAll(KEYS.APPLICATIONS, apps);
     return apps[idx];
-  },
-
-  async getApplicationById(id: string): Promise<JobApplication | null> {
-    const apps = await this.getApplications();
-    return apps.find((a) => a.id === id) ?? null;
   },
 
   async addTimelineEvent(id: string, event: string, type: string): Promise<void> {
@@ -100,7 +104,9 @@ export const db = {
     await saveAll(KEYS.APPLICATIONS, apps.filter((a) => a.id !== id));
   },
 
-  // ============ EMAIL ALERTS ============
+  // ============================================
+  // EMAIL ALERTS
+  // ============================================
   async getAlerts(unreadOnly = false): Promise<EmailAlert[]> {
     const alerts = await getAll<EmailAlert>(KEYS.ALERTS);
     const sorted = alerts.sort((a, b) =>
@@ -126,7 +132,7 @@ export const db = {
       ai_summary: alert.ai_summary,
       suggested_reply: alert.suggested_reply,
     };
-    alerts.unshift(newAlert);
+    alerts.push(newAlert);
     await saveAll(KEYS.ALERTS, alerts);
     return newAlert;
   },
@@ -140,7 +146,9 @@ export const db = {
     }
   },
 
-  // ============ CV VAULT ============
+  // ============================================
+  // CV VAULT
+  // ============================================
   async getCVVault(): Promise<CVVault> {
     try {
       const data = await AsyncStorage.getItem(KEYS.CV_VAULT);
@@ -154,6 +162,7 @@ export const db = {
     const vault = await this.getCVVault();
     const versions = vault.versions || [];
 
+    // Save current as version before overwriting
     if (vault.cvText) {
       versions.unshift({
         id: generateId(),
@@ -161,6 +170,7 @@ export const db = {
         cvText: vault.cvText,
         savedAt: vault.lastUpdated || new Date().toISOString(),
       });
+      // Keep only last 5 versions
       versions.splice(5);
     }
 
@@ -172,16 +182,20 @@ export const db = {
     }));
   },
 
-  // ============ STATISTICS ============
+  // ============================================
+  // STATISTICS
+  // ============================================
   async getStats(): Promise<AppStats> {
     const apps = await this.getApplications();
     const now = new Date();
 
+    // Applications per day (last 14 days)
     const dailyCounts: Record<string, number> = {};
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      dailyCounts[d.toISOString().split("T")[0]] = 0;
+      const key = d.toISOString().split("T")[0];
+      dailyCounts[key] = 0;
     }
     apps.forEach((a) => {
       const key = new Date(a.date_applied).toISOString().split("T")[0];
@@ -198,13 +212,16 @@ export const db = {
     const interviewRate = total > 0 ? Math.round((interviews / total) * 100) : 0;
     const offerRate = interviews > 0 ? Math.round((offers / interviews) * 100) : 0;
 
+    // This week count
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
     const thisWeek = apps.filter((a) => new Date(a.date_applied) >= weekAgo).length;
 
     return {
       total, interviews, offers, rejected, waiting,
-      responseRate, interviewRate, offerRate, thisWeek, dailyCounts,
+      responseRate, interviewRate, offerRate, thisWeek,
+      dailyCounts,
+      statusBreakdown: { applied: waiting, interview: interviews, offer: offers, rejected },
     };
   },
 
@@ -213,7 +230,9 @@ export const db = {
   },
 };
 
-// ============ TYPES ============
+// ============================================
+// TYPES
+// ============================================
 export interface JobApplication {
   id: string;
   company: string;
@@ -279,4 +298,5 @@ export interface AppStats {
   offerRate: number;
   thisWeek: number;
   dailyCounts: Record<string, number>;
+  statusBreakdown: Record<string, number>;
 }

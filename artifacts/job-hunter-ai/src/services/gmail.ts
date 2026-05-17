@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import { Alert } from "react-native";
 import { CONFIG } from "../config";
-import { aiService } from "./claude";
+import { aiService } from "./gemini";
 import { db } from "./storage";
 import { EmailAlert } from "../types";
 

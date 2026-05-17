@@ -15,13 +15,21 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Dashboard</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="feed">
+        <Icon sf={{ default: "newspaper", selected: "newspaper.fill" }} />
+        <Label>Feed</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="kanban">
+        <Icon sf={{ default: "rectangle.3.group", selected: "rectangle.3.group.fill" }} />
+        <Label>Kanban</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="applications">
         <Icon sf={{ default: "briefcase", selected: "briefcase.fill" }} />
-        <Label>Applications</Label>
+        <Label>Track</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ai-writer">
         <Icon sf={{ default: "sparkles", selected: "sparkles" }} />
-        <Label>AI Writer</Label>
+        <Label>AI</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="alerts">
         <Icon sf={{ default: "bell", selected: "bell.fill" }} />
@@ -54,7 +62,7 @@ function ClassicTabLayout() {
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
         },
-        tabBarLabelStyle: { fontSize: 11 },
+        tabBarLabelStyle: { fontSize: 10 },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
@@ -71,16 +79,30 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="feed"
+        options={{
+          title: "Feed",
+          tabBarIcon: ({ color }) => <Ionicons name="newspaper-outline" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="kanban"
+        options={{
+          title: "Kanban",
+          tabBarIcon: ({ color }) => <Ionicons name="grid-outline" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="applications"
         options={{
-          title: "Applications",
+          title: "Track",
           tabBarIcon: ({ color }) => <Ionicons name="briefcase-outline" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="ai-writer"
         options={{
-          title: "AI Writer",
+          title: "AI",
           tabBarIcon: ({ color }) => <Ionicons name="sparkles-outline" size={22} color={color} />,
         }}
       />

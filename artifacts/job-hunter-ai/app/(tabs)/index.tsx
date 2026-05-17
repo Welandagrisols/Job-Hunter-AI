@@ -46,10 +46,7 @@ export default function DashboardScreen() {
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const checkEmails = async () => {
-    if (!gmailConnected) {
-      router.push("/(tabs)/settings");
-      return;
-    }
+    if (!gmailConnected) { router.push("/(tabs)/settings"); return; }
     setChecking(true);
     await gmailService.checkForNewEmails();
     await loadData();
@@ -92,15 +89,23 @@ export default function DashboardScreen() {
           <Text style={[styles.greeting, { color: colors.foreground }]}>Good day, Wesley</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Your job hunt at a glance</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={checkEmails}
-          disabled={checking}
-        >
-          {checking
-            ? <ActivityIndicator color={colors.primary} size="small" />
-            : <Ionicons name="mail-outline" size={22} color={colors.primary} />}
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push("/statistics")}
+          >
+            <Ionicons name="bar-chart-outline" size={20} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: checking ? colors.primary : colors.border }]}
+            onPress={checkEmails}
+            disabled={checking}
+          >
+            {checking
+              ? <ActivityIndicator color={colors.primary} size="small" />
+              : <Ionicons name="mail-outline" size={20} color={colors.primary} />}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {!gmailConnected && (
@@ -131,13 +136,41 @@ export default function DashboardScreen() {
         ))}
       </View>
 
+      {/* Quick actions */}
+      <View style={styles.quickActionsRow}>
+        <QuickAction
+          icon="newspaper-outline"
+          label="Job Feed"
+          color={colors.primary}
+          colors={colors}
+          onPress={() => router.push("/(tabs)/feed")}
+        />
+        <QuickAction
+          icon="scan-outline"
+          label="Capture Job"
+          color={colors.green}
+          colors={colors}
+          onPress={() => router.push("/job-capture")}
+        />
+        <QuickAction
+          icon="grid-outline"
+          label="Kanban"
+          color={colors.orange}
+          colors={colors}
+          onPress={() => router.push("/(tabs)/kanban")}
+        />
+        <QuickAction
+          icon="bar-chart-outline"
+          label="Stats"
+          color={colors.gold}
+          colors={colors}
+          onPress={() => router.push("/statistics")}
+        />
+      </View>
+
       {recentAlerts.length > 0 && (
         <View style={styles.section}>
-          <SectionHeader
-            title="New Emails"
-            onSeeAll={() => router.push("/(tabs)/alerts")}
-            colors={colors}
-          />
+          <SectionHeader title="New Emails" onSeeAll={() => router.push("/(tabs)/alerts")} colors={colors} />
           {recentAlerts.map((alert) => {
             const color = classificationColor(alert.classification, colors);
             const label = CLASSIFICATION_LABELS[alert.classification] || "Email";
@@ -150,12 +183,8 @@ export default function DashboardScreen() {
                 <View style={[styles.dot, { backgroundColor: color }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.alertLabel, { color }]}>{label}</Text>
-                  <Text style={[styles.alertSubject, { color: colors.foreground }]} numberOfLines={1}>
-                    {alert.subject}
-                  </Text>
-                  <Text style={[styles.alertFrom, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {alert.from_email}
-                  </Text>
+                  <Text style={[styles.alertSubject, { color: colors.foreground }]} numberOfLines={1}>{alert.subject}</Text>
+                  <Text style={[styles.alertFrom, { color: colors.textSecondary }]} numberOfLines={1}>{alert.from_email}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
               </TouchableOpacity>
@@ -174,15 +203,21 @@ export default function DashboardScreen() {
         {recentApps.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Ionicons name="briefcase-outline" size={36} color={colors.textMuted} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              No applications yet
-            </Text>
-            <TouchableOpacity
-              style={[styles.emptyBtn, { borderColor: colors.primary + "55", backgroundColor: colors.primary + "22" }]}
-              onPress={() => router.push("/add-application")}
-            >
-              <Text style={[styles.emptyBtnText, { color: colors.primary }]}>Add First Application</Text>
-            </TouchableOpacity>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No applications yet</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.emptyBtn, { borderColor: colors.primary + "55", backgroundColor: colors.primary + "22" }]}
+                onPress={() => router.push("/add-application")}
+              >
+                <Text style={[styles.emptyBtnText, { color: colors.primary }]}>Add Manually</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.emptyBtn, { borderColor: colors.green + "55", backgroundColor: colors.green + "22" }]}
+                onPress={() => router.push("/job-capture")}
+              >
+                <Text style={[styles.emptyBtnText, { color: colors.green }]}>Capture from URL</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           recentApps.map((app) => {
@@ -213,6 +248,20 @@ export default function DashboardScreen() {
 
       <View style={{ height: Platform.OS === "web" ? 50 : 32 }} />
     </ScrollView>
+  );
+}
+
+function QuickAction({ icon, label, color, colors, onPress }: any) {
+  return (
+    <TouchableOpacity
+      style={{ flex: 1, alignItems: "center", gap: 6 }}
+      onPress={onPress}
+    >
+      <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: color + "22", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color + "44" }}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, textAlign: "center" }}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -277,7 +326,7 @@ function makeStyles(colors: ReturnType<typeof useColors>, topPad: number) {
     greeting: { fontSize: 24, fontWeight: "700" },
     subtitle: { fontSize: 13, marginTop: 2 },
     iconBtn: {
-      width: 44, height: 44, borderRadius: 22, alignItems: "center",
+      width: 40, height: 40, borderRadius: 20, alignItems: "center",
       justifyContent: "center", borderWidth: 1,
     },
     banner: {
@@ -285,13 +334,15 @@ function makeStyles(colors: ReturnType<typeof useColors>, topPad: number) {
       marginHorizontal: 16, marginBottom: 16, borderRadius: 12, padding: 12, borderWidth: 1,
     },
     bannerText: { flex: 1, fontSize: 13 },
-    statsRow: { flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 24 },
-    statCard: {
-      flex: 1, borderRadius: 12, padding: 10, alignItems: "center",
-      borderWidth: 1, gap: 2,
-    },
+    statsRow: { flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 20 },
+    statCard: { flex: 1, borderRadius: 12, padding: 10, alignItems: "center", borderWidth: 1, gap: 2 },
     statValue: { fontSize: 22, fontWeight: "700" },
     statLabel: { fontSize: 11 },
+    quickActionsRow: {
+      flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 24,
+      backgroundColor: colors.card, marginHorizontal: 16, borderRadius: 16, padding: 16,
+      borderWidth: 1, borderColor: colors.border,
+    },
     section: { paddingHorizontal: 16, marginBottom: 24 },
     alertCard: {
       flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12,
@@ -306,9 +357,7 @@ function makeStyles(colors: ReturnType<typeof useColors>, topPad: number) {
       borderWidth: 1, gap: 12,
     },
     emptyText: { fontSize: 14 },
-    emptyBtn: {
-      paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
-    },
+    emptyBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
     emptyBtnText: { fontSize: 13, fontWeight: "600" },
     appCard: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",

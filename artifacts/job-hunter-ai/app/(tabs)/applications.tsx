@@ -62,20 +62,10 @@ export default function ApplicationsScreen() {
   };
 
   const deleteApp = (id: string, company: string) => {
-    Alert.alert(
-      "Delete Application",
-      `Remove your application to ${company}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete", style: "destructive",
-          onPress: async () => {
-            await db.deleteApplication(id);
-            loadApps();
-          },
-        },
-      ]
-    );
+    Alert.alert("Delete Application", `Remove your application to ${company}?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => { await db.deleteApplication(id); loadApps(); } },
+    ]);
   };
 
   const statusColor = (status: string) => {
@@ -100,23 +90,42 @@ export default function ApplicationsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>Applications</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity
-            style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 }}
-            onPress={() => router.push("/smart-import")}
-          >
-            <Ionicons name="sparkles" size={15} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 13 }}>Smart Import</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
-            onPress={() => router.push("/add-application")}
-          >
-            <Ionicons name="add" size={22} color={colors.primaryForeground} />
-          </TouchableOpacity>
+      <View style={{ paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>Applications</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              style={{ height: 40, paddingHorizontal: 12, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 5 }}
+              onPress={() => router.push("/(tabs)/kanban")}
+            >
+              <Ionicons name="grid-outline" size={15} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 13 }}>Kanban</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ height: 40, paddingHorizontal: 12, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 5 }}
+              onPress={() => router.push("/smart-import")}
+            >
+              <Ionicons name="sparkles" size={15} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontWeight: "600", fontSize: 13 }}>Import</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
+              onPress={() => router.push("/add-application")}
+            >
+              <Ionicons name="add" size={22} color={colors.primaryForeground} />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Capture from URL shortcut */}
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 10, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginBottom: 8 }}
+          onPress={() => router.push("/job-capture")}
+        >
+          <Ionicons name="scan-outline" size={16} color={colors.green} />
+          <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 13 }}>Capture from job URL or paste text → AI auto-fills everything</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginBottom: 10, backgroundColor: colors.card, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border }}>
@@ -174,7 +183,8 @@ export default function ApplicationsScreen() {
         ListEmptyComponent={
           <View style={{ alignItems: "center", paddingTop: 60 }}>
             <Ionicons name="briefcase-outline" size={44} color={colors.textMuted} />
-            <Text style={{ color: colors.textMuted, marginTop: 12 }}>No applications found</Text>
+            <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 15, fontWeight: "600" }}>No applications found</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 6 }}>Add your first application or use Job Capture</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -204,6 +214,9 @@ export default function ApplicationsScreen() {
                     </Text>
                   )}
                 </View>
+                {item.location && (
+                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>📍 {item.location}</Text>
+                )}
                 {item.notes ? (
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 4, fontStyle: "italic" }} numberOfLines={1}>
                     {item.notes}
