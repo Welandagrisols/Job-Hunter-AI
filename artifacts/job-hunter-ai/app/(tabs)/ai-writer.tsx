@@ -6,7 +6,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { aiService } from "@/src/services/gemini";
+import { aiService, setGeminiStatusCallback } from "@/src/services/gemini";
 import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 
@@ -38,6 +38,7 @@ export default function AIWriterScreen() {
   const [result, setResult] = useState("");
   const [cvMatchResult, setCvMatchResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState("");
   const [hasCv, setHasCv] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
@@ -68,7 +69,9 @@ export default function AIWriterScreen() {
     }
 
     setLoading(true);
+    setLoadingStep("Generating...");
     resetResults();
+    setGeminiStatusCallback((msg) => setLoadingStep(msg));
 
     try {
       if (mode === "keyword_match") {
@@ -92,6 +95,8 @@ export default function AIWriterScreen() {
     } catch (err: any) {
       setGenError(err.message || "Failed to generate. Check your Gemini API key in Settings.");
     } finally {
+      setGeminiStatusCallback(null);
+      setLoadingStep("");
       setLoading(false);
     }
   };
@@ -218,7 +223,7 @@ export default function AIWriterScreen() {
           {loading ? (
             <>
               <ActivityIndicator color={colors.primaryForeground} size="small" />
-              <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Generating...</Text>
+              <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>{loadingStep || "Generating..."}</Text>
             </>
           ) : (
             <>

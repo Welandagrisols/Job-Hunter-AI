@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 import { urlParser } from "@/src/services/urlParser";
+import { setGeminiStatusCallback } from "@/src/services/gemini";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
@@ -49,6 +50,7 @@ export default function SmartImportScreen() {
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loadingStep, setLoadingStep] = useState("");
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {
@@ -72,6 +74,8 @@ export default function SmartImportScreen() {
     setParsed(null);
     setParseError(null);
     setSaveSuccess(false);
+    setLoadingStep(inputMode === "url" ? "Fetching job page..." : "Reading job ad...");
+    setGeminiStatusCallback((msg) => setLoadingStep(msg));
     try {
       const result = inputMode === "url"
         ? await urlParser.parseFromUrl(input)
@@ -89,6 +93,8 @@ export default function SmartImportScreen() {
     } catch (err: any) {
       setParseError(err.message || "Could not parse the job. Try pasting the text directly.");
     } finally {
+      setGeminiStatusCallback(null);
+      setLoadingStep("");
       setParsing(false);
     }
   };
@@ -222,7 +228,7 @@ export default function SmartImportScreen() {
           {parsing ? (
             <>
               <ActivityIndicator color={colors.primaryForeground} size="small" />
-              <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Analysing job ad...</Text>
+              <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>{loadingStep || "Analysing job ad..."}</Text>
             </>
           ) : (
             <>

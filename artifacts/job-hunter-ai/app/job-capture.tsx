@@ -8,7 +8,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { urlParser, ParsedJob } from "@/src/services/urlParser";
 import { db } from "@/src/services/storage";
-import { aiService, getGeminiApiKey } from "@/src/services/gemini";
+import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
 import { theme } from "@/src/theme";
 
 type InputMode = "url" | "text";
@@ -63,6 +63,7 @@ export default function JobCaptureScreen() {
     setParseError(null);
     setGeneratedEmail("");
     setGeneratedCoverLetter("");
+    setGeminiStatusCallback((msg) => setLoadingStep(msg));
 
     try {
       setLoadingStep(inputMode === "url" ? "Fetching job page..." : "Reading job ad...");
@@ -74,6 +75,7 @@ export default function JobCaptureScreen() {
     } catch (err: any) {
       setParseError(err.message || "Could not extract job details. Try switching to 'Paste Text'.");
     } finally {
+      setGeminiStatusCallback(null);
       setLoading(false);
       setLoadingStep("");
     }

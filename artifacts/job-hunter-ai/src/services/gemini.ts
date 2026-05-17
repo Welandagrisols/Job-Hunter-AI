@@ -47,6 +47,28 @@ export async function getGeminiApiKey(): Promise<string> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+let _statusCallback: ((msg: string) => void) | null = null;
+let _lastCallTime = 0;
+const MIN_CALL_GAP_MS = 5000;
+
+export function setGeminiStatusCallback(cb: ((msg: string) => void) | null) {
+  _statusCallback = cb;
+}
+
+function notifyStatus(msg: string) {
+  _statusCallback?.(msg);
+}
+
+async function sleepWithCountdown(totalMs: number, template: (s: number) => string) {
+  const step = 1000;
+  let remaining = totalMs;
+  while (remaining > 0) {
+    notifyStatus(template(Math.ceil(remaining / 1000)));
+    await sleep(Math.min(step, remaining));
+    remaining -= step;
+  }
+}
+
 async function callGeminiOnce(apiKey: string, prompt: string): Promise<Response> {
   return fetch(`${GEMINI_API_BASE}?key=${apiKey}`, {
     method: "POST",
@@ -67,10 +89,23 @@ async function callGemini(prompt: string): Promise<string> {
     throw new Error("Gemini API key not configured. Go to Settings to add your free API key.");
   }
 
+  const now = Date.now();
+  const gap = now - _lastCallTime;
+  if (gap < MIN_CALL_GAP_MS) {
+    const wait = MIN_CALL_GAP_MS - gap;
+    await sleep(wait);
+  }
+  _lastCallTime = Date.now();
+
+  const RETRY_DELAYS = [20000, 40000];
+
   let response = await callGeminiOnce(apiKey, prompt);
 
-  if (response.status === 429) {
-    await sleep(8000);
+  for (const delay of RETRY_DELAYS) {
+    if (response.status !== 429) break;
+    await sleepWithCountdown(delay, (s) => `Rate limited — retrying in ${s}s...`);
+    notifyStatus("Retrying...");
+    _lastCallTime = Date.now();
     response = await callGeminiOnce(apiKey, prompt);
   }
 
@@ -81,7 +116,8 @@ async function callGemini(prompt: string): Promise<string> {
       throw new Error("Invalid Gemini API key. Please update it in Settings.");
     }
     if (response.status === 429) {
-      throw new Error("Rate limit hit. Please wait 30 seconds and try again.");
+      const detail = msg ? ` (${msg})` : "";
+      throw new Error(`Rate limit still active after retrying${detail}. Please wait a minute before trying again.`);
     }
     throw new Error(msg || "Gemini API error. Check your API key in Settings.");
   }
