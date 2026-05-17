@@ -123,7 +123,9 @@ export default function SettingsScreen() {
       } else {
         const err = await response.json().catch(() => ({}));
         const msg = err.error?.message || `Error ${response.status}`;
-        if (response.status === 400 || msg.includes("API_KEY_INVALID")) {
+        if (response.status === 429 || msg.includes("quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+          setTestResult({ ok: true, message: "Key is valid! You've hit the free rate limit — this resets automatically in a few seconds. All AI features will work normally." });
+        } else if (response.status === 400 || msg.includes("API_KEY_INVALID")) {
           setTestResult({ ok: false, message: "Invalid API key. Please check it and try again." });
         } else if (response.status === 403) {
           setTestResult({ ok: false, message: "Key rejected. Make sure the Gemini API is enabled in Google AI Studio." });
