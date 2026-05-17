@@ -49,7 +49,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let _statusCallback: ((msg: string) => void) | null = null;
 let _lastCallTime = 0;
-const MIN_CALL_GAP_MS = 5000;
+const MIN_CALL_GAP_MS = 2000;
 
 export function setGeminiStatusCallback(cb: ((msg: string) => void) | null) {
   _statusCallback = cb;
@@ -69,7 +69,7 @@ async function sleepWithCountdown(totalMs: number, template: (s: number) => stri
   }
 }
 
-async function callGeminiOnce(apiKey: string, prompt: string): Promise<Response> {
+async function callGeminiOnce(apiKey: string, prompt: string, maxTokens: number): Promise<Response> {
   return fetch(`${GEMINI_API_BASE}?key=${apiKey}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -77,13 +77,13 @@ async function callGeminiOnce(apiKey: string, prompt: string): Promise<Response>
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1500,
+        maxOutputTokens: maxTokens,
       },
     }),
   });
 }
 
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string, maxTokens = 800): Promise<string> {
   const apiKey = await getApiKey();
   if (!apiKey) {
     throw new Error("Gemini API key not configured. Go to Settings to add your free API key.");
@@ -99,7 +99,7 @@ async function callGemini(prompt: string): Promise<string> {
 
   const RETRY_DELAYS = [50000, 70000];
 
-  let response = await callGeminiOnce(apiKey, prompt);
+  let response = await callGeminiOnce(apiKey, prompt, maxTokens);
 
   if (response.status === 429) {
     const errBody = await response.json().catch(() => ({}));
@@ -119,7 +119,7 @@ async function callGemini(prompt: string): Promise<string> {
       await sleepWithCountdown(delay, (s) => `Rate limited — retrying in ${s}s...`);
       notifyStatus("Retrying...");
       _lastCallTime = Date.now();
-      response = await callGeminiOnce(apiKey, prompt);
+      response = await callGeminiOnce(apiKey, prompt, maxTokens);
       if (response.status !== 429) break;
     }
   }
@@ -168,7 +168,7 @@ Return this exact JSON structure:
   "salary": "salary info or empty string",
   "requirements": ["requirement 1", "requirement 2"],
   "responsibilities": ["responsibility 1", "responsibility 2"]
-}`);
+}`, 400);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
@@ -214,7 +214,7 @@ Write a complete application email body (not subject line).
 - End with professional sign-off
 - Include [Phone] and [Email] placeholders in signature
 - Do not use generic phrases like "I am writing to express my interest"
-`);
+`, 400);
   },
 
   async generateCoverLetter(
@@ -230,6 +230,7 @@ Write a complete application email body (not subject line).
       standard: "3-4 paragraphs, maximum 300 words",
       full: "4-5 paragraphs, maximum 500 words, full formal letter format with date and address",
     };
+    const tokenLimit = length === "short" ? 250 : length === "standard" ? 450 : 700;
 
     return callGemini(`
 Write a cover letter for the candidate described below.
@@ -249,7 +250,7 @@ Structure:
 - Opening: specific reason this role + company excites the candidate
 - Body: relevant experience proof points matching the JD
 - Closing: confident call to action
-`);
+`, tokenLimit);
   },
 
   async tailorCVPoints(jobDescription: string, cvText?: string): Promise<string> {
@@ -280,7 +281,7 @@ SKILLS TO EMPHASIZE:
 
 KEYWORDS MISSING FROM YOUR CV:
 [keywords in the JD that should be added]
-`);
+`, 600);
   },
 
   async scoreCVMatch(jobDescription: string, cvText: string): Promise<{
@@ -305,7 +306,7 @@ Return this exact JSON:
   "matchedKeywords": ["keyword1", "keyword2"],
   "missingKeywords": ["keyword3", "keyword4"],
   "suggestions": ["suggestion1", "suggestion2"]
-}`);
+}`, 300);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
@@ -347,7 +348,7 @@ TECHNICAL QUESTIONS TO PREPARE FOR:
 SMART QUESTIONS TO ASK THE INTERVIEWER:
 • [question that shows domain knowledge]
 • [question about the role/team]
-`);
+`, 900);
   },
 
   async answerApplicationQuestion(
@@ -368,7 +369,7 @@ Question: ${question}
 
 Write a concise, specific answer (2-4 sentences) personalized to the candidate's actual experience.
 Do not use generic answers.
-`);
+`, 200);
   },
 
   async generateFollowUp(
@@ -393,7 +394,7 @@ Rules:
 - Reference the specific role
 - Ask for application status
 - Professional sign-off with [Phone] and [Email] placeholders
-`);
+`, 200);
   },
 
   async classifyEmail(subject: string, body: string, company: string): Promise<{
@@ -427,7 +428,7 @@ Return this exact JSON:
   "summary": "1-2 sentence plain English summary",
   "suggestedReply": "A professional reply the candidate should send",
   "urgency": "high"
-}`);
+}`, 350);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
@@ -456,7 +457,7 @@ Jobs:
 ${jobList}
 
 Return array matching job count exactly:
-[{"score": 85, "reason": "Direct match for candidate's field and location"}, ...]`);
+[{"score": 85, "reason": "Direct match for candidate's field and location"}, ...]`, 400);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
