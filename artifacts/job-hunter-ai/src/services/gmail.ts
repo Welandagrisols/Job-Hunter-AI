@@ -31,6 +31,7 @@ export const gmailService = {
         redirectUri,
         responseType: AuthSession.ResponseType.Code,
         usePKCE: true,
+        extraParams: { prompt: "select_account" },
       });
 
       const result = await request.promptAsync(discovery);
