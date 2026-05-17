@@ -30,6 +30,7 @@ export default function SettingsScreen() {
   const [showGmailSetup, setShowGmailSetup] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
   const [testingKey, setTestingKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const loadStatus = useCallback(async () => {
     const [gmail, savedKey, bgEnabled] = await Promise.all([
@@ -99,10 +100,11 @@ export default function SettingsScreen() {
 
   const testApiKey = async () => {
     setTestingKey(true);
+    setTestResult(null);
     try {
       const key = await getGeminiApiKey();
       if (!key) {
-        Alert.alert("No Key Found", "Please add your Gemini API key first.");
+        setTestResult({ ok: false, message: "No API key found. Please add your key first." });
         return;
       }
       const response = await fetch(
@@ -117,20 +119,20 @@ export default function SettingsScreen() {
         }
       );
       if (response.ok) {
-        Alert.alert("API Key Working", "Your Gemini API key is valid and connected successfully. All AI features are active.");
+        setTestResult({ ok: true, message: "Connected! Your Gemini API key is valid. All AI features are active." });
       } else {
         const err = await response.json().catch(() => ({}));
         const msg = err.error?.message || `Error ${response.status}`;
         if (response.status === 400 || msg.includes("API_KEY_INVALID")) {
-          Alert.alert("Invalid Key", "This API key is not valid. Please check it and try again.\n\nGet a free key at aistudio.google.com");
+          setTestResult({ ok: false, message: "Invalid API key. Please check it and try again." });
         } else if (response.status === 403) {
-          Alert.alert("Key Rejected", "The API key was rejected. Make sure the Gemini API is enabled in Google AI Studio.");
+          setTestResult({ ok: false, message: "Key rejected. Make sure the Gemini API is enabled in Google AI Studio." });
         } else {
-          Alert.alert("Test Failed", msg);
+          setTestResult({ ok: false, message: msg || "Test failed. Please try again." });
         }
       }
     } catch {
-      Alert.alert("Connection Error", "Could not reach Gemini. Check your internet connection and try again.");
+      setTestResult({ ok: false, message: "Could not reach Gemini. Check your internet connection." });
     } finally {
       setTestingKey(false);
     }
@@ -208,18 +210,28 @@ export default function SettingsScreen() {
                 </Text>
               </TouchableOpacity>
               {geminiConfigured && (
-                <TouchableOpacity
-                  style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, padding: 12, borderWidth: 1, borderColor: colors.border, opacity: testingKey ? 0.6 : 1 }}
-                  onPress={testApiKey}
-                  disabled={testingKey}
-                >
-                  {testingKey
-                    ? <ActivityIndicator size="small" color={colors.primary} />
-                    : <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />}
-                  <Text style={{ color: colors.primary, fontWeight: "600" }}>
-                    {testingKey ? "Testing..." : "Test Connection"}
-                  </Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 999, padding: 12, borderWidth: 1, borderColor: colors.border, opacity: testingKey ? 0.6 : 1 }}
+                    onPress={testApiKey}
+                    disabled={testingKey}
+                  >
+                    {testingKey
+                      ? <ActivityIndicator size="small" color={colors.primary} />
+                      : <Ionicons name="checkmark-circle-outline" size={16} color={colors.primary} />}
+                    <Text style={{ color: colors.primary, fontWeight: "600" }}>
+                      {testingKey ? "Testing..." : "Test Connection"}
+                    </Text>
+                  </TouchableOpacity>
+                  {testResult && (
+                    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, borderRadius: 10, padding: 12, backgroundColor: testResult.ok ? colors.green + "18" : "#ff000018", borderWidth: 1, borderColor: testResult.ok ? colors.green + "55" : "#ff000055" }}>
+                      <Ionicons name={testResult.ok ? "checkmark-circle" : "close-circle"} size={18} color={testResult.ok ? colors.green : colors.destructive} style={{ marginTop: 1 }} />
+                      <Text style={{ flex: 1, color: testResult.ok ? colors.green : colors.destructive, fontSize: 13, lineHeight: 20, fontWeight: "600" }}>
+                        {testResult.message}
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
               <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 8 }}
