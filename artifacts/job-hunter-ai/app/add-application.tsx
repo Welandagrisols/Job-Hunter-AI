@@ -1,32 +1,50 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, Alert, ActivityIndicator, Platform,
+  Share, Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/src/services/storage";
+import { notificationService } from "@/src/services/notifications";
 import { useColors } from "@/hooks/useColors";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
 
+const AI_DOC_LABELS: Record<string, string> = {
+  application_email: "Application Email",
+  cover_letter: "Cover Letter",
+  interview_prep: "Interview Prep",
+  cv_tailoring: "CV Tailoring Notes",
+};
+
 export default function AddApplicationScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, focus } = useLocalSearchParams<{ id?: string; focus?: string }>();
+  const interviewDateRef = useRef<TextInput>(null);
 
+  const [tab, setTab] = useState<"details" | "documents">("details");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [jobUrl, setJobUrl] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [interviewDate, setInterviewDate] = useState("");
   const [status, setStatus] = useState<JobApplication["status"]>("applied");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!id);
+
+  // AI documents
+  const [coverLetter, setCoverLetter] = useState("");
+  const [applicationEmail, setApplicationEmail] = useState("");
+  const [interviewPrep, setInterviewPrep] = useState("");
+  const [cvTailoring, setCvTailoring] = useState("");
 
   useEffect(() => {
     if (id) {
@@ -37,8 +55,21 @@ export default function AddApplicationScreen() {
           setContactEmail(app.contact_email || "");
           setJobUrl(app.job_url || "");
           setDeadline(app.deadline || "");
+          setInterviewDate(app.interview_date || "");
           setStatus(app.status);
           setNotes(app.notes || "");
+          setCoverLetter(app.cover_letter || "");
+          setApplicationEmail(app.application_email || "");
+          setInterviewPrep(app.interview_prep || "");
+          setCvTailoring(app.cv_tailoring || "");
+
+          if (focus === "interview_date") {
+            setTab("details");
+            setTimeout(() => interviewDateRef.current?.focus(), 400);
+          }
+          if (focus === "documents") {
+            setTab("documents");
+          }
         }
         setLoading(false);
       });
@@ -57,6 +88,19 @@ export default function AddApplicationScreen() {
     return map[s] || colors.primary;
   };
 
+  const scheduleInterviewReminder = async (dateStr: string, company: string, role: string) => {
+    if (!dateStr) return;
+    try {
+      const date = new Date(dateStr);
+      date.setHours(7, 30, 0, 0);
+      if (date > new Date()) {
+        await notificationService.scheduleInterviewReminder(date, company, role);
+      }
+    } catch {
+      // notifications not available
+    }
+  };
+
   const save = async () => {
     if (!company.trim() || !role.trim()) {
       Alert.alert("Required", "Please enter company name and role");
@@ -65,23 +109,32 @@ export default function AddApplicationScreen() {
 
     setSaving(true);
     try {
-      const payload = {
+      const payload: Partial<JobApplication> = {
         company: company.trim(),
         role: role.trim(),
         contact_email: contactEmail.trim(),
         job_url: jobUrl.trim(),
         deadline: deadline.trim() || undefined,
+        interview_date: interviewDate.trim() || undefined,
         status,
         notes: notes.trim(),
+        cover_letter: coverLetter || undefined,
+        application_email: applicationEmail || undefined,
+        interview_prep: interviewPrep || undefined,
+        cv_tailoring: cvTailoring || undefined,
       };
 
       if (id) {
+        const prev = await db.getApplicationById(id);
         await db.updateApplication(id, payload);
+        if (interviewDate && interviewDate !== prev?.interview_date) {
+          await scheduleInterviewReminder(interviewDate, company.trim(), role.trim());
+        }
       } else {
-        await db.addApplication({
-          ...payload,
-          date_applied: new Date().toISOString(),
-        } as any);
+        await db.addApplication({ ...payload, date_applied: new Date().toISOString() } as any);
+        if (interviewDate) {
+          await scheduleInterviewReminder(interviewDate, company.trim(), role.trim());
+        }
       }
       router.back();
     } catch (err: any) {
@@ -91,8 +144,29 @@ export default function AddApplicationScreen() {
     }
   };
 
+  const shareDoc = async (content: string, label: string) => {
+    try {
+      await Share.share({ message: `${label}\n\n${content}` });
+    } catch {}
+  };
+
+  const shareToWhatsApp = (content: string, label: string) => {
+    const text = encodeURIComponent(`${label}\n\n${content}`);
+    Linking.openURL(`whatsapp://send?text=${text}`).catch(() => {
+      Alert.alert("WhatsApp not found", "WhatsApp is not installed on this device.");
+    });
+  };
+
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const topPad = Platform.OS === "web" ? 20 : insets.top;
+
+  const aiDocs = [
+    { key: "application_email", value: applicationEmail, set: setApplicationEmail },
+    { key: "cover_letter", value: coverLetter, set: setCoverLetter },
+    { key: "interview_prep", value: interviewPrep, set: setInterviewPrep },
+    { key: "cv_tailoring", value: cvTailoring, set: setCvTailoring },
+  ];
+  const savedDocCount = aiDocs.filter((d) => d.value).length;
 
   if (loading) {
     return (
@@ -104,6 +178,7 @@ export default function AddApplicationScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
       <View style={{
         flexDirection: "row", alignItems: "center", justifyContent: "space-between",
         paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 14,
@@ -117,123 +192,224 @@ export default function AddApplicationScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 16, paddingBottom: bottomPad + 40 }}
-      >
-        <Field label="Company *" colors={colors}>
-          <TextInput
-            style={inputStyle(colors)}
-            placeholder="e.g. Amiran Kenya Ltd"
-            placeholderTextColor={colors.textMuted}
-            value={company}
-            onChangeText={setCompany}
-          />
-        </Field>
-
-        <Field label="Role / Job Title *" colors={colors}>
-          <TextInput
-            style={inputStyle(colors)}
-            placeholder="e.g. Cereal Agronomist"
-            placeholderTextColor={colors.textMuted}
-            value={role}
-            onChangeText={setRole}
-          />
-        </Field>
-
-        <Field label="Contact Email" colors={colors}>
-          <TextInput
-            style={inputStyle(colors)}
-            placeholder="recruitment@company.com"
-            placeholderTextColor={colors.textMuted}
-            value={contactEmail}
-            onChangeText={setContactEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </Field>
-
-        <Field label="Job URL" colors={colors}>
-          <TextInput
-            style={inputStyle(colors)}
-            placeholder="https://..."
-            placeholderTextColor={colors.textMuted}
-            value={jobUrl}
-            onChangeText={setJobUrl}
-            keyboardType="url"
-            autoCapitalize="none"
-          />
-        </Field>
-
-        <Field label="Application Deadline" colors={colors}>
-          <TextInput
-            style={inputStyle(colors)}
-            placeholder="YYYY-MM-DD (e.g. 2026-08-31)"
-            placeholderTextColor={colors.textMuted}
-            value={deadline}
-            onChangeText={setDeadline}
-          />
-        </Field>
-
-        <Field label="Status" colors={colors}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {STATUS_OPTIONS.map((s) => {
-              const color = statusColor(s);
-              const active = status === s;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-                    backgroundColor: active ? color + "22" : colors.card,
-                    borderWidth: 1, borderColor: active ? color : colors.border,
-                  }}
-                  onPress={() => setStatus(s)}
-                >
-                  <Text style={{ color: active ? color : colors.textSecondary, fontSize: 13, fontWeight: active ? "600" : "400" }}>
-                    {STATUS_LABELS[s]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </Field>
-
-        <Field label="Notes" colors={colors}>
-          <TextInput
-            style={[inputStyle(colors), { minHeight: 100, textAlignVertical: "top" }]}
-            placeholder="Any additional notes..."
-            placeholderTextColor={colors.textMuted}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </Field>
-
+      {/* Tabs */}
+      <View style={{ flexDirection: "row", marginHorizontal: 16, marginBottom: 4, backgroundColor: colors.card, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border }}>
         <TouchableOpacity
-          style={{
-            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-            backgroundColor: saving ? colors.primary + "99" : colors.primary,
-            borderRadius: 999, padding: 16, marginTop: 4,
-          }}
-          onPress={save}
-          disabled={saving}
+          style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center", backgroundColor: tab === "details" ? colors.primary : "transparent" }}
+          onPress={() => setTab("details")}
         >
-          {saving
-            ? <ActivityIndicator color={colors.primaryForeground} />
-            : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color={colors.primaryForeground} />
-                <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>
-                  {id ? "Update" : "Save Application"}
+          <Text style={{ color: tab === "details" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 13 }}>Details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center", backgroundColor: tab === "documents" ? colors.primary : "transparent" }}
+          onPress={() => setTab("documents")}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 13 }}>AI Documents</Text>
+            {savedDocCount > 0 && (
+              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: tab === "documents" ? colors.primaryForeground + "33" : colors.primary + "22", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.primary, fontSize: 10, fontWeight: "700" }}>{savedDocCount}</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {tab === "details" ? (
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, gap: 16, paddingBottom: bottomPad + 100, paddingTop: 8 }}>
+          <Field label="Company *" colors={colors}>
+            <TextInput style={inputStyle(colors)} placeholder="e.g. Amiran Kenya Ltd" placeholderTextColor={colors.textMuted} value={company} onChangeText={setCompany} />
+          </Field>
+
+          <Field label="Role / Job Title *" colors={colors}>
+            <TextInput style={inputStyle(colors)} placeholder="e.g. Cereal Agronomist" placeholderTextColor={colors.textMuted} value={role} onChangeText={setRole} />
+          </Field>
+
+          <Field label="Status" colors={colors}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {STATUS_OPTIONS.map((s) => {
+                const color = statusColor(s);
+                const active = status === s;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: active ? color + "22" : colors.card, borderWidth: 1, borderColor: active ? color : colors.border }}
+                    onPress={() => setStatus(s)}
+                  >
+                    <Text style={{ color: active ? color : colors.textSecondary, fontSize: 13, fontWeight: active ? "600" : "400" }}>
+                      {STATUS_LABELS[s]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Field>
+
+          {status === "interview" && (
+            <Field label="Interview Date" colors={colors}>
+              <TextInput
+                ref={interviewDateRef}
+                style={inputStyle(colors)}
+                placeholder="YYYY-MM-DD (e.g. 2026-06-10)"
+                placeholderTextColor={colors.textMuted}
+                value={interviewDate}
+                onChangeText={setInterviewDate}
+                keyboardType="numeric"
+              />
+              {interviewDate ? (
+                <Text style={{ color: colors.green, fontSize: 12, marginTop: 4 }}>
+                  A morning reminder will be scheduled for this date.
                 </Text>
+              ) : null}
+            </Field>
+          )}
+
+          <Field label="Application Deadline" colors={colors}>
+            <TextInput style={inputStyle(colors)} placeholder="YYYY-MM-DD (e.g. 2026-08-31)" placeholderTextColor={colors.textMuted} value={deadline} onChangeText={setDeadline} />
+          </Field>
+
+          <Field label="Contact Email" colors={colors}>
+            <TextInput style={inputStyle(colors)} placeholder="recruitment@company.com" placeholderTextColor={colors.textMuted} value={contactEmail} onChangeText={setContactEmail} keyboardType="email-address" autoCapitalize="none" />
+          </Field>
+
+          <Field label="Job URL" colors={colors}>
+            <TextInput style={inputStyle(colors)} placeholder="https://..." placeholderTextColor={colors.textMuted} value={jobUrl} onChangeText={setJobUrl} keyboardType="url" autoCapitalize="none" />
+          </Field>
+
+          <Field label="Notes" colors={colors}>
+            <TextInput style={[inputStyle(colors), { minHeight: 80, textAlignVertical: "top" }]} placeholder="Any additional notes..." placeholderTextColor={colors.textMuted} value={notes} onChangeText={setNotes} multiline numberOfLines={3} textAlignVertical="top" />
+          </Field>
+
+          <TouchableOpacity
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: saving ? colors.primary + "99" : colors.primary, borderRadius: 999, padding: 16, marginTop: 4 }}
+            onPress={save}
+            disabled={saving}
+          >
+            {saving
+              ? <ActivityIndicator color={colors.primaryForeground} />
+              : <><Ionicons name="checkmark-circle-outline" size={20} color={colors.primaryForeground} /><Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>{id ? "Update" : "Save Application"}</Text></>
+            }
+          </TouchableOpacity>
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: bottomPad + 40, paddingTop: 8 }}>
+          {savedDocCount === 0 ? (
+            <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
+              <Ionicons name="document-text-outline" size={48} color={colors.textMuted} />
+              <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 16 }}>No AI documents yet</Text>
+              <Text style={{ color: colors.textMuted, textAlign: "center", fontSize: 13, lineHeight: 20 }}>
+                Generate a cover letter or application email from the Job Capture screen or AI Writer, and they'll be saved here automatically.
+              </Text>
+            </View>
+          ) : (
+            aiDocs.filter((d) => d.value).map((doc) => (
+              <AiDocCard
+                key={doc.key}
+                label={AI_DOC_LABELS[doc.key]}
+                content={doc.value}
+                colors={colors}
+                onShare={() => shareDoc(doc.value, AI_DOC_LABELS[doc.key])}
+                onWhatsApp={() => shareToWhatsApp(doc.value, AI_DOC_LABELS[doc.key])}
+                onEdit={(v) => doc.set(v)}
+                onSave={id ? async () => {
+                  await db.saveAiDocument(id, doc.key as any, doc.value);
+                  Alert.alert("Saved", `${AI_DOC_LABELS[doc.key]} updated.`);
+                } : undefined}
+              />
+            ))
+          )}
+
+          {id && (
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: saving ? colors.primary + "99" : colors.primary, borderRadius: 999, padding: 14, marginTop: 4 }}
+              onPress={save}
+              disabled={saving}
+            >
+              {saving
+                ? <ActivityIndicator color={colors.primaryForeground} />
+                : <><Ionicons name="save-outline" size={18} color={colors.primaryForeground} /><Text style={{ color: colors.primaryForeground, fontWeight: "700" }}>Save All Changes</Text></>
+              }
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function AiDocCard({ label, content, colors, onShare, onWhatsApp, onEdit, onSave }: any) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(content);
+
+  return (
+    <View style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: "hidden" }}>
+      <TouchableOpacity
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 }}
+        onPress={() => setExpanded(!expanded)}
+        activeOpacity={0.8}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="document-text" size={16} color={colors.primary} />
+          <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 14 }}>{label}</Text>
+        </View>
+        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      {expanded && (
+        <>
+          <View style={{ paddingHorizontal: 14, paddingBottom: 4 }}>
+            {editing ? (
+              <TextInput
+                style={{ color: colors.foreground, fontSize: 13, lineHeight: 20, backgroundColor: colors.background, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.border, minHeight: 150, textAlignVertical: "top" }}
+                value={editValue}
+                onChangeText={setEditValue}
+                multiline
+                textAlignVertical="top"
+              />
+            ) : (
+              <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }} numberOfLines={expanded ? undefined : 6}>
+                {content}
+              </Text>
+            )}
+          </View>
+
+          <View style={{ flexDirection: "row", padding: 10, gap: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+            {editing ? (
+              <>
+                <ActionBtn icon="close-outline" label="Cancel" color={colors.textSecondary} onPress={() => { setEditing(false); setEditValue(content); }} />
+                {onSave && (
+                  <ActionBtn icon="save-outline" label="Save" color={colors.green} onPress={async () => { onEdit(editValue); if (onSave) await onSave(); setEditing(false); }} />
+                )}
+              </>
+            ) : (
+              <>
+                <ActionBtn icon="create-outline" label="Edit" color={colors.textSecondary} onPress={() => setEditing(true)} />
+                <ActionBtn icon="copy-outline" label="Copy" color={colors.primary} onPress={() => {
+                  const { Clipboard } = require("react-native");
+                  Clipboard.setString(content);
+                  Alert.alert("Copied!", `${label} copied to clipboard.`);
+                }} />
+                <ActionBtn icon="share-outline" label="Share" color={colors.primary} onPress={onShare} />
+                <ActionBtn icon="logo-whatsapp" label="WhatsApp" color="#25D366" onPress={onWhatsApp} />
               </>
             )}
-        </TouchableOpacity>
-      </ScrollView>
+          </View>
+        </>
+      )}
     </View>
+  );
+}
+
+function ActionBtn({ icon, label, color, onPress }: any) {
+  return (
+    <TouchableOpacity
+      style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 7, borderRadius: 8, backgroundColor: color + "15" }}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={14} color={color} />
+      <Text style={{ color, fontSize: 11, fontWeight: "600" }}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 

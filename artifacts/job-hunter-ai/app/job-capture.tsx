@@ -127,6 +127,7 @@ export default function JobCaptureScreen() {
         status: "applied",
         cover_letter: generatedCoverLetter,
         application_email: generatedEmail,
+        source: parsed.sourceName,
         notes: `Source: ${parsed.sourceName}`,
       });
 

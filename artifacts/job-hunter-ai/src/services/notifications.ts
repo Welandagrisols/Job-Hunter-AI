@@ -136,6 +136,29 @@ export const notificationService = {
     }
   },
 
+  async scheduleInterviewReminder(
+    date: Date,
+    company: string,
+    role: string
+  ): Promise<void> {
+    try {
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) return;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Interview Today",
+          body: `${role} at ${company} — good luck!`,
+          sound: "default",
+          data: { type: "interview_reminder", company, role },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+      });
+    } catch (err) {
+      console.warn("Interview reminder failed:", err);
+    }
+  },
+
   async cancelAll(): Promise<void> {
     await Notifications.cancelAllScheduledNotificationsAsync();
   },

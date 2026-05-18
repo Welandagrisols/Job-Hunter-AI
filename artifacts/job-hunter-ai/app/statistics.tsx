@@ -55,6 +55,10 @@ export default function StatisticsScreen() {
   const dailyData = Object.entries(stats.dailyCounts);
   const maxDaily = Math.max(...dailyData.map(([, v]) => v), 1);
 
+  // Sort source breakdown by count descending
+  const sourceEntries = Object.entries(stats.sourceBreakdown)
+    .sort(([, a], [, b]) => b - a);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -77,13 +81,14 @@ export default function StatisticsScreen() {
         <View style={styles.weekRight}>
           <Text style={styles.weekTip}>
             {stats.thisWeek === 0
-              ? "Start applying today! 💪"
+              ? "Start applying today!"
               : stats.thisWeek < 3
-              ? "Good start! Aim for 5/week"
+              ? "Good start. Aim for 5/week."
               : stats.thisWeek < 5
-              ? "Great momentum! Keep going!"
-              : "Excellent! You're crushing it! 🔥"}
+              ? "Great momentum! Keep going."
+              : "Excellent! You're on fire."}
           </Text>
+          <Text style={styles.weekTotal}>{stats.total} total applications</Text>
         </View>
       </View>
 
@@ -110,24 +115,11 @@ export default function StatisticsScreen() {
             const barHeight = count > 0 ? Math.max((count / maxDaily) * CHART_HEIGHT, 8) : 4;
             const isToday = date === new Date().toISOString().split("T")[0];
             const dayLabel = new Date(date).toLocaleDateString("en", { weekday: "short" }).slice(0, 1);
-
             return (
               <View key={date} style={styles.barWrapper}>
                 <Text style={styles.barCount}>{count > 0 ? count : ""}</Text>
                 <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: barHeight,
-                        backgroundColor: isToday
-                          ? theme.colors.accent.cyan
-                          : count > 0
-                          ? theme.colors.accent.cyan + "88"
-                          : theme.colors.bg.elevated,
-                      },
-                    ]}
-                  />
+                  <View style={[styles.bar, { height: barHeight, backgroundColor: isToday ? theme.colors.accent.cyan : count > 0 ? theme.colors.accent.cyan + "88" : theme.colors.bg.elevated }]} />
                 </View>
                 <Text style={[styles.barLabel, isToday && { color: theme.colors.accent.cyan }]}>
                   {i % 2 === 0 ? dayLabel : ""}
@@ -140,7 +132,7 @@ export default function StatisticsScreen() {
 
       {/* Status breakdown */}
       <View style={styles.chartCard}>
-        <Text style={styles.chartTitle}>Status Breakdown</Text>
+        <Text style={styles.chartTitle}>Pipeline Breakdown</Text>
         <View style={styles.statusBreakdown}>
           {[
             { label: "Waiting / Applied", value: stats.waiting, color: theme.colors.accent.cyan },
@@ -154,15 +146,7 @@ export default function StatisticsScreen() {
                 <Text style={styles.statusLabel}>{item.label}</Text>
               </View>
               <View style={styles.statusBarContainer}>
-                <View
-                  style={[
-                    styles.statusBar,
-                    {
-                      width: stats.total > 0 ? `${(item.value / stats.total) * 100}%` as any : "0%",
-                      backgroundColor: item.color,
-                    },
-                  ]}
-                />
+                <View style={[styles.statusBar, { width: stats.total > 0 ? `${(item.value / stats.total) * 100}%` as any : "0%", backgroundColor: item.color }]} />
               </View>
               <Text style={[styles.statusValue, { color: item.color }]}>{item.value}</Text>
             </View>
@@ -170,24 +154,59 @@ export default function StatisticsScreen() {
         </View>
       </View>
 
+      {/* Source breakdown */}
+      {sourceEntries.length > 0 && (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Where Your Leads Come From</Text>
+          <View style={styles.statusBreakdown}>
+            {sourceEntries.map(([source, count]) => {
+              const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+              const color = sourceColor(source);
+              return (
+                <View key={source} style={styles.statusRow}>
+                  <View style={[styles.statusLeft, { width: 130 }]}>
+                    <View style={[styles.statusDot, { backgroundColor: color }]} />
+                    <Text style={[styles.statusLabel, { fontSize: 11 }]} numberOfLines={1}>{source}</Text>
+                  </View>
+                  <View style={styles.statusBarContainer}>
+                    <View style={[styles.statusBar, { width: `${pct}%` as any, backgroundColor: color }]} />
+                  </View>
+                  <Text style={[styles.statusValue, { color }]}>{count}</Text>
+                </View>
+              );
+            })}
+          </View>
+          {sourceEntries.length > 0 && (
+            <Text style={styles.sourceTip}>
+              {sourceEntries[0][0] !== "Manual / Other"
+                ? `${sourceEntries[0][0]} is giving you the most leads. Keep monitoring it.`
+                : "Tag jobs with their source using Job Capture to track which boards work best."}
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Insights */}
       <View style={styles.insightsCard}>
-        <Text style={styles.chartTitle}>💡 Insights</Text>
+        <Text style={styles.chartTitle}>Insights</Text>
         <View style={styles.insights}>
           {stats.responseRate < 20 && stats.total > 3 && (
-            <InsightRow icon="alert-circle-outline" color={theme.colors.accent.orange} text="Low response rate. Try tailoring your CV more closely to each job description." />
+            <InsightRow icon="alert-circle-outline" color={theme.colors.accent.orange} text="Low response rate. Try tailoring your CV more closely to each job — use CV Tailoring in AI Writer." />
           )}
           {stats.responseRate >= 20 && (
-            <InsightRow icon="checkmark-circle-outline" color={theme.colors.accent.green} text={`Good response rate of ${stats.responseRate}%! Your applications are landing well.`} />
+            <InsightRow icon="checkmark-circle-outline" color={theme.colors.accent.green} text={`Good response rate of ${stats.responseRate}%. Your applications are landing well.`} />
           )}
           {stats.thisWeek === 0 && (
-            <InsightRow icon="calendar-outline" color={theme.colors.accent.red} text="No applications this week yet. Aim for at least 5 per week." />
+            <InsightRow icon="calendar-outline" color={theme.colors.accent.red} text="No applications this week. Aim for at least 5 per week to maintain momentum." />
           )}
           {stats.interviews > 0 && stats.offers === 0 && (
-            <InsightRow icon="mic-outline" color={theme.colors.accent.cyan} text="You're getting interviews! Use the Interview Prep tool in AI Writer to convert them to offers." />
+            <InsightRow icon="mic-outline" color={theme.colors.accent.cyan} text="You're getting interviews — great sign! Use Interview Prep in AI Writer to convert them to offers." />
           )}
           {stats.thisWeek >= 5 && (
-            <InsightRow icon="flame-outline" color={theme.colors.accent.gold} text={`Amazing! ${stats.thisWeek} applications this week. You're on fire!`} />
+            <InsightRow icon="flame-outline" color={theme.colors.accent.gold} text={`${stats.thisWeek} applications this week. Outstanding!`} />
+          )}
+          {stats.total > 0 && stats.interviews === 0 && stats.total > 5 && (
+            <InsightRow icon="search-outline" color={theme.colors.accent.orange} text="No interviews yet. Try targeting roles that more closely match your 5+ years of agronomy experience." />
           )}
         </View>
       </View>
@@ -195,6 +214,26 @@ export default function StatisticsScreen() {
       <View style={{ height: 40 }} />
     </ScrollView>
   );
+}
+
+const SOURCE_COLORS = [
+  theme.colors.accent.cyan,
+  theme.colors.accent.green,
+  theme.colors.accent.gold,
+  theme.colors.accent.orange,
+  "#A78BFA",
+  "#F472B6",
+];
+
+const sourceColorMap: Record<string, string> = {};
+let sourceColorIndex = 0;
+
+function sourceColor(source: string): string {
+  if (!sourceColorMap[source]) {
+    sourceColorMap[source] = SOURCE_COLORS[sourceColorIndex % SOURCE_COLORS.length];
+    sourceColorIndex++;
+  }
+  return sourceColorMap[source];
 }
 
 function MetricCard({ label, value, icon, color }: any) {
@@ -243,6 +282,7 @@ const styles = StyleSheet.create({
   weekDivider: { width: 1, height: 60, backgroundColor: theme.colors.accent.cyan + "33", marginRight: theme.spacing.md },
   weekRight: { flex: 1 },
   weekTip: { color: theme.colors.text.primary, fontSize: theme.font.sizes.md, lineHeight: 22 },
+  weekTotal: { color: theme.colors.text.muted, fontSize: theme.font.sizes.sm, marginTop: 4 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: theme.spacing.md, gap: theme.spacing.sm, marginBottom: theme.spacing.md },
   metricCard: { flex: 1, minWidth: "45%", backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.md, padding: theme.spacing.md, alignItems: "center", borderWidth: 1, gap: 4 },
   metricValue: { fontSize: theme.font.sizes.xxxl, fontWeight: theme.font.weights.extrabold },
@@ -263,11 +303,12 @@ const styles = StyleSheet.create({
   statusBreakdown: { gap: theme.spacing.sm },
   statusRow: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm },
   statusLeft: { flexDirection: "row", alignItems: "center", gap: theme.spacing.xs, width: 110 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusLabel: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm },
+  statusDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  statusLabel: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.sm, flex: 1 },
   statusBarContainer: { flex: 1, height: 8, backgroundColor: theme.colors.bg.elevated, borderRadius: 4, overflow: "hidden" },
   statusBar: { height: "100%", borderRadius: 4 },
   statusValue: { width: 24, textAlign: "right", fontSize: theme.font.sizes.sm, fontWeight: theme.font.weights.semibold },
+  sourceTip: { color: theme.colors.text.muted, fontSize: theme.font.sizes.xs, marginTop: theme.spacing.md, lineHeight: 18 },
   insightsCard: { marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.lg, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.bg.border },
   insights: { gap: theme.spacing.md },
   insightRow: { flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.sm },

@@ -48,6 +48,10 @@ export const db = {
       notes: app.notes,
       cover_letter: app.cover_letter,
       application_email: app.application_email,
+      interview_prep: app.interview_prep,
+      cv_tailoring: app.cv_tailoring,
+      interview_date: app.interview_date,
+      source: app.source,
       location: app.location,
       salary: app.salary,
       requirements: app.requirements || [],
@@ -94,6 +98,10 @@ export const db = {
     apps[idx].timeline = timeline;
     apps[idx].updated_at = new Date().toISOString();
     await saveAll(KEYS.APPLICATIONS, apps);
+  },
+
+  async saveAiDocument(id: string, field: "cover_letter" | "application_email" | "interview_prep" | "cv_tailoring", content: string): Promise<void> {
+    await this.updateApplication(id, { [field]: content } as Partial<JobApplication>);
   },
 
   async deleteApplication(id: string): Promise<void> {
@@ -203,9 +211,22 @@ export const db = {
     weekAgo.setDate(weekAgo.getDate() - 7);
     const thisWeek = apps.filter((a) => new Date(a.date_applied) >= weekAgo).length;
 
+    // Source breakdown — uses source field or parses from notes
+    const sourceBreakdown: Record<string, number> = {};
+    apps.forEach((a) => {
+      let source = a.source || "";
+      if (!source && a.notes) {
+        const match = a.notes.match(/Source:\s*(.+)/);
+        if (match) source = match[1].trim();
+      }
+      if (!source) source = "Manual / Other";
+      sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
+    });
+
     return {
       total, interviews, offers, rejected, waiting,
-      responseRate, interviewRate, offerRate, thisWeek, dailyCounts,
+      responseRate, interviewRate, offerRate, thisWeek,
+      dailyCounts, sourceBreakdown,
     };
   },
 
@@ -239,11 +260,15 @@ export interface JobApplication {
   date_applied: string;
   status: "applied" | "interview" | "offer" | "rejected" | "withdrawn" | "waiting";
   deadline?: string;
+  interview_date?: string;
   contact_email?: string;
   job_url?: string;
   notes?: string;
   cover_letter?: string;
   application_email?: string;
+  interview_prep?: string;
+  cv_tailoring?: string;
+  source?: string;
   location?: string;
   salary?: string;
   requirements?: string[];
@@ -297,6 +322,7 @@ export interface AppStats {
   offerRate: number;
   thisWeek: number;
   dailyCounts: Record<string, number>;
+  sourceBreakdown: Record<string, number>;
 }
 
 export interface UserProfile {

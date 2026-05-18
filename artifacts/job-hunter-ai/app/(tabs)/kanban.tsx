@@ -7,8 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { db, JobApplication } from "@/src/services/storage";
+import { notificationService } from "@/src/services/notifications";
 import { theme } from "@/src/theme";
-import { format } from "date-fns";
+import { format, isToday, isTomorrow, isPast } from "date-fns";
 
 const COLUMNS = [
   { key: "applied", label: "Applied", color: theme.colors.accent.cyan },
@@ -45,6 +46,24 @@ export default function KanbanScreen() {
     await db.updateApplication(app.id, { status: newStatus as any });
     await load();
     setMovingId(null);
+
+    if (newStatus === "interview") {
+      promptInterviewDate(app.id, app.company, app.role);
+    }
+  };
+
+  const promptInterviewDate = (id: string, company: string, role: string) => {
+    Alert.alert(
+      "Interview Scheduled!",
+      `${role} at ${company}\n\nDo you know the interview date? Setting it enables a morning reminder.`,
+      [
+        { text: "Set Later", style: "cancel" },
+        {
+          text: "Set Date",
+          onPress: () => router.push({ pathname: "/add-application", params: { id, focus: "interview_date" } }),
+        },
+      ]
+    );
   };
 
   const showMoveOptions = (app: JobApplication) => {
@@ -57,7 +76,7 @@ export default function KanbanScreen() {
 
     Alert.alert(
       app.company,
-      `Current: ${app.status}\nMove to:`,
+      `${app.role}\nCurrent: ${COLUMNS.find(c => c.key === app.status)?.label || app.status}`,
       [...options, { text: "Cancel", style: "cancel" as const }]
     );
   };
@@ -75,6 +94,10 @@ export default function KanbanScreen() {
     return acc;
   }, {} as Record<string, number>);
 
+  const upcomingInterviews = applications.filter(
+    (a) => a.status === "interview" && a.interview_date
+  ).sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -87,6 +110,29 @@ export default function KanbanScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Upcoming interviews banner */}
+      {upcomingInterviews.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.interviewBannerScroll} contentContainerStyle={styles.interviewBannerContent}>
+          {upcomingInterviews.slice(0, 3).map((app) => {
+            const date = new Date(app.interview_date!);
+            const label = isToday(date) ? "TODAY" : isTomorrow(date) ? "TOMORROW" : format(date, "MMM d");
+            const urgent = isToday(date) || isTomorrow(date);
+            const past = isPast(date) && !isToday(date);
+            return (
+              <TouchableOpacity
+                key={app.id}
+                style={[styles.interviewBanner, urgent && styles.interviewBannerUrgent, past && styles.interviewBannerPast]}
+                onPress={() => router.push({ pathname: "/add-application", params: { id: app.id } })}
+              >
+                <Ionicons name="calendar" size={12} color={urgent ? theme.colors.accent.green : past ? theme.colors.text.muted : theme.colors.accent.cyan} />
+                <Text style={[styles.interviewBannerDate, urgent && { color: theme.colors.accent.green }, past && { color: theme.colors.text.muted }]}>{label}</Text>
+                <Text style={styles.interviewBannerCompany} numberOfLines={1}>{app.company}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
       {/* Column summary pills */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll} contentContainerStyle={styles.pillContainer}>
         {COLUMNS.map((col) => (
@@ -97,11 +143,10 @@ export default function KanbanScreen() {
         ))}
       </ScrollView>
 
-      {/* Kanban columns - horizontal scroll */}
+      {/* Kanban columns */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.board} contentContainerStyle={styles.boardContent}>
         {COLUMNS.map((col) => {
           const colApps = applications.filter((a) => a.status === col.key);
-
           return (
             <View key={col.key} style={styles.column}>
               <View style={[styles.colHeader, { borderTopColor: col.color }]}>
@@ -114,7 +159,7 @@ export default function KanbanScreen() {
               <ScrollView showsVerticalScrollIndicator={false} style={styles.colScroll}>
                 {colApps.length === 0 ? (
                   <View style={styles.emptyCol}>
-                    <Text style={styles.emptyColText}>No jobs here</Text>
+                    <Text style={styles.emptyColText}>Empty</Text>
                   </View>
                 ) : (
                   colApps.map((app) => (
@@ -140,7 +185,7 @@ export default function KanbanScreen() {
 
       <View style={styles.hint}>
         <Ionicons name="information-circle-outline" size={14} color={theme.colors.text.muted} />
-        <Text style={styles.hintText}>Tap card to view · Long press to move · Arrow to advance</Text>
+        <Text style={styles.hintText}>Tap to view · Long press to move · → to advance stage</Text>
       </View>
     </View>
   );
@@ -150,6 +195,16 @@ function KanbanCard({ app, color, moving, onPress, onLongPress, onMove }: any) {
   const daysSince = Math.floor(
     (Date.now() - new Date(app.date_applied).getTime()) / (1000 * 60 * 60 * 24)
   );
+
+  const interviewDate = app.interview_date ? new Date(app.interview_date) : null;
+  const interviewLabel = interviewDate
+    ? isToday(interviewDate) ? "Today!"
+    : isTomorrow(interviewDate) ? "Tomorrow"
+    : format(interviewDate, "MMM d")
+    : null;
+  const interviewUrgent = interviewDate && (isToday(interviewDate) || isTomorrow(interviewDate));
+
+  const hasAiDocs = !!(app.cover_letter || app.application_email || app.interview_prep || app.cv_tailoring);
 
   return (
     <TouchableOpacity
@@ -164,12 +219,24 @@ function KanbanCard({ app, color, moving, onPress, onLongPress, onMove }: any) {
         <>
           <View style={styles.cardTop}>
             <Text style={styles.cardCompany} numberOfLines={1}>{app.company}</Text>
-            <TouchableOpacity onPress={onMove} style={styles.moveBtn}>
-              <Ionicons name="arrow-forward-circle" size={20} color={color} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              {hasAiDocs && <Ionicons name="document-text" size={12} color={theme.colors.text.muted} />}
+              <TouchableOpacity onPress={onMove} style={styles.moveBtn}>
+                <Ionicons name="arrow-forward-circle" size={20} color={color} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={styles.cardRole} numberOfLines={2}>{app.role}</Text>
+
+          {interviewLabel && (
+            <View style={[styles.interviewChip, interviewUrgent && styles.interviewChipUrgent]}>
+              <Ionicons name="calendar-outline" size={10} color={interviewUrgent ? theme.colors.accent.green : theme.colors.text.muted} />
+              <Text style={[styles.interviewChipText, interviewUrgent && { color: theme.colors.accent.green }]}>
+                {interviewLabel}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.cardBottom}>
             <Text style={styles.cardDays}>{daysSince}d ago</Text>
@@ -200,6 +267,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: theme.spacing.md, paddingTop: 60, paddingBottom: theme.spacing.sm },
   title: { fontSize: theme.font.sizes.xxxl, fontWeight: theme.font.weights.bold, color: theme.colors.text.primary },
   addBtn: { width: 40, height: 40, borderRadius: theme.radius.full, backgroundColor: theme.colors.accent.cyan, alignItems: "center", justifyContent: "center" },
+  interviewBannerScroll: { maxHeight: 44 },
+  interviewBannerContent: { paddingHorizontal: theme.spacing.md, gap: theme.spacing.sm, alignItems: "center" },
+  interviewBanner: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: theme.radius.full, backgroundColor: theme.colors.bg.card, borderWidth: 1, borderColor: theme.colors.accent.cyan + "44" },
+  interviewBannerUrgent: { borderColor: theme.colors.accent.green + "66", backgroundColor: theme.colors.accent.green + "11" },
+  interviewBannerPast: { borderColor: theme.colors.bg.border, opacity: 0.6 },
+  interviewBannerDate: { color: theme.colors.accent.cyan, fontSize: theme.font.sizes.xs, fontWeight: theme.font.weights.bold },
+  interviewBannerCompany: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.xs, maxWidth: 100 },
   pillScroll: { maxHeight: 50 },
   pillContainer: { paddingHorizontal: theme.spacing.md, gap: theme.spacing.sm, alignItems: "center" },
   pill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: theme.spacing.sm, paddingVertical: 6, borderRadius: theme.radius.full, borderWidth: 1 },
@@ -221,6 +295,9 @@ const styles = StyleSheet.create({
   cardCompany: { flex: 1, color: theme.colors.text.primary, fontWeight: theme.font.weights.semibold, fontSize: theme.font.sizes.sm },
   moveBtn: { padding: 2 },
   cardRole: { color: theme.colors.text.secondary, fontSize: theme.font.sizes.xs, marginTop: 4, lineHeight: 16 },
+  interviewChip: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: theme.colors.bg.elevated, borderRadius: theme.radius.full, borderWidth: 1, borderColor: theme.colors.bg.border, alignSelf: "flex-start" },
+  interviewChipUrgent: { borderColor: theme.colors.accent.green + "55", backgroundColor: theme.colors.accent.green + "11" },
+  interviewChipText: { color: theme.colors.text.muted, fontSize: 10 },
   cardBottom: { flexDirection: "row", justifyContent: "space-between", marginTop: theme.spacing.sm },
   cardDays: { color: theme.colors.text.muted, fontSize: 10 },
   cardDeadline: { color: theme.colors.accent.orange, fontSize: 10 },
