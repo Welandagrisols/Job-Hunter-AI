@@ -432,16 +432,17 @@ async function scoreRelevance(jobs: RawJob[]): Promise<RawJob[]> {
   const highScore = prescored.filter((j) => j.relevanceScore >= 60);
   const lowScore = prescored.filter((j) => j.relevanceScore < 10);
 
-  if (needsAI.length > 0 && needsAI.length <= 10) {
+  if (needsAI.length > 0) {
     try {
-      const jobList = needsAI.map((j, i) => `${i + 1}. ${j.title}: ${j.description.slice(0, 150)}`).join("\n");
+      const batch = needsAI.slice(0, 6);
+      const jobList = batch.map((j, i) => `${i + 1}. ${j.title}: ${j.description.slice(0, 100)}`).join("\n");
       const result = await aiService.scoreJobRelevance(jobList);
 
       if (result && Array.isArray(result)) {
         result.forEach((r: any, i: number) => {
-          if (needsAI[i]) {
-            needsAI[i].relevanceScore = r.score || needsAI[i].relevanceScore;
-            needsAI[i].relevanceReason = r.reason || needsAI[i].relevanceReason;
+          if (batch[i]) {
+            batch[i].relevanceScore = r.score || batch[i].relevanceScore;
+            batch[i].relevanceReason = r.reason || batch[i].relevanceReason;
           }
         });
       }
@@ -459,13 +460,24 @@ export const feedService = {
     const seenIds = await this.getSeenJobIds();
     const allJobs: RawJob[] = [];
 
-    const results = await Promise.allSettled(
+    const overallTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Feed fetch timed out")), OVERALL_FEED_TIMEOUT)
+    );
+
+    const fetchAll = Promise.allSettled(
       enabledSources.map(async (source) => {
         const jobs = await fetchRSS(source);
         onProgress?.(source.name, jobs.length);
         return { source, jobs };
       })
     );
+
+    let results: PromiseSettledResult<{ source: JobSource; jobs: RawJob[] }>[];
+    try {
+      results = await Promise.race([fetchAll, overallTimeout]) as typeof results;
+    } catch {
+      results = [];
+    }
 
     results.forEach((result) => {
       if (result.status === "fulfilled") {
