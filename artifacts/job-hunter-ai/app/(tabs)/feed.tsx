@@ -87,6 +87,17 @@ export default function FeedScreen() {
     router.push({ pathname: "/job-capture", params: { prefillUrl: job.url } });
   };
 
+  const writeForJob = (job: FeedJob) => {
+    router.push({
+      pathname: "/(tabs)/ai-writer",
+      params: {
+        prefill_role: job.title,
+        prefill_company: job.source,
+        prefill_description: job.description || "",
+      },
+    });
+  };
+
   if (loading && jobs.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -205,6 +216,7 @@ export default function FeedScreen() {
               job={item}
               onOpen={() => openJob(item)}
               onCapture={() => captureJob(item)}
+              onWrite={() => writeForJob(item)}
             />
           )}
         />
@@ -213,11 +225,14 @@ export default function FeedScreen() {
   );
 }
 
-function JobCard({ job, onOpen, onCapture }: {
+function JobCard({ job, onOpen, onCapture, onWrite }: {
   job: FeedJob;
   onOpen: () => void;
   onCapture: () => void;
+  onWrite: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   const scoreColor =
     job.relevanceScore >= 70 ? theme.colors.accent.green :
     job.relevanceScore >= 40 ? theme.colors.accent.orange :
@@ -229,22 +244,24 @@ function JobCard({ job, onOpen, onCapture }: {
     "Low Match";
 
   return (
-    <TouchableOpacity style={[styles.card, job.isNew && styles.cardNew]} onPress={onOpen} activeOpacity={0.8}>
+    <View style={[styles.card, job.isNew && styles.cardNew]}>
       {job.isNew && <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>}
 
-      <View style={styles.cardSource}>
-        <Text style={styles.sourceEmoji}>{job.sourceIcon}</Text>
-        <Text style={[styles.cardSourceName, { color: job.sourceColor }]}>{job.source}</Text>
-        <Text style={styles.cardTime}>
-          {formatDistanceToNow(new Date(job.publishedAt), { addSuffix: true })}
-        </Text>
-      </View>
+      <TouchableOpacity onPress={onOpen} activeOpacity={0.8}>
+        <View style={styles.cardSource}>
+          <Text style={styles.sourceEmoji}>{job.sourceIcon}</Text>
+          <Text style={[styles.cardSourceName, { color: job.sourceColor }]}>{job.source}</Text>
+          <Text style={styles.cardTime}>
+            {formatDistanceToNow(new Date(job.publishedAt), { addSuffix: true })}
+          </Text>
+        </View>
 
-      <Text style={styles.cardTitle} numberOfLines={2}>{job.title}</Text>
+        <Text style={styles.cardTitle} numberOfLines={2}>{job.title}</Text>
 
-      {job.description ? (
-        <Text style={styles.cardDescription} numberOfLines={2}>{job.description}</Text>
-      ) : null}
+        {job.description ? (
+          <Text style={styles.cardDescription} numberOfLines={2}>{job.description}</Text>
+        ) : null}
+      </TouchableOpacity>
 
       <View style={styles.cardFooter}>
         <View style={[styles.scoreBadge, { backgroundColor: scoreColor + "22", borderColor: scoreColor + "55" }]}>
@@ -255,9 +272,9 @@ function JobCard({ job, onOpen, onCapture }: {
         </View>
 
         <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.captureBtn} onPress={onCapture}>
-            <Ionicons name="add-circle-outline" size={16} color={theme.colors.accent.cyan} />
-            <Text style={styles.captureBtnText}>Apply</Text>
+          <TouchableOpacity style={styles.applyBtn} onPress={() => setExpanded((e) => !e)}>
+            <Ionicons name={expanded ? "chevron-up" : "rocket-outline"} size={15} color={theme.colors.accent.cyan} />
+            <Text style={styles.applyBtnText}>Apply</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.openBtn} onPress={onOpen}>
             <Ionicons name="open-outline" size={16} color={theme.colors.text.secondary} />
@@ -268,7 +285,49 @@ function JobCard({ job, onOpen, onCapture }: {
       {job.relevanceReason ? (
         <Text style={styles.relevanceReason}>🎯 {job.relevanceReason}</Text>
       ) : null}
-    </TouchableOpacity>
+
+      {/* Expanded action menu */}
+      {expanded && (
+        <View style={styles.actionMenu}>
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onWrite(); }}>
+            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.cyan + "22" }]}>
+              <Ionicons name="sparkles-outline" size={16} color={theme.colors.accent.cyan} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionMenuTitle}>Write with AI</Text>
+              <Text style={styles.actionMenuSub}>Cover letter, CV tailor, interview prep & more</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
+          </TouchableOpacity>
+
+          <View style={styles.actionMenuDivider} />
+
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onCapture(); }}>
+            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.green + "22" }]}>
+              <Ionicons name="scan-outline" size={16} color={theme.colors.accent.green} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionMenuTitle}>Extract & Track</Text>
+              <Text style={styles.actionMenuSub}>Pull full JD details, save to job tracker</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
+          </TouchableOpacity>
+
+          <View style={styles.actionMenuDivider} />
+
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onOpen(); }}>
+            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.orange + "22" }]}>
+              <Ionicons name="globe-outline" size={16} color={theme.colors.accent.orange} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionMenuTitle}>Open Job Page</Text>
+              <Text style={styles.actionMenuSub}>View full listing on the job board</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -312,10 +371,16 @@ const styles = StyleSheet.create({
   scoreDot: { width: 6, height: 6, borderRadius: 3 },
   scoreText: { fontSize: theme.font.sizes.xs, fontWeight: theme.font.weights.semibold },
   cardActions: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm },
-  captureBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: theme.colors.accent.cyanDim, borderRadius: theme.radius.full, paddingHorizontal: theme.spacing.sm, paddingVertical: 4, borderWidth: 1, borderColor: theme.colors.accent.cyan + "44" },
-  captureBtnText: { color: theme.colors.accent.cyan, fontSize: theme.font.sizes.xs, fontWeight: theme.font.weights.semibold },
+  applyBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: theme.colors.accent.cyanDim, borderRadius: theme.radius.full, paddingHorizontal: theme.spacing.sm, paddingVertical: 4, borderWidth: 1, borderColor: theme.colors.accent.cyan + "44" },
+  applyBtnText: { color: theme.colors.accent.cyan, fontSize: theme.font.sizes.xs, fontWeight: theme.font.weights.semibold },
   openBtn: { width: 28, height: 28, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.bg.elevated, borderRadius: theme.radius.full },
   relevanceReason: { color: theme.colors.text.muted, fontSize: theme.font.sizes.xs, marginTop: theme.spacing.xs, fontStyle: "italic" },
+  actionMenu: { marginTop: theme.spacing.sm, backgroundColor: theme.colors.bg.elevated, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.bg.border, overflow: "hidden" },
+  actionMenuItem: { flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, padding: theme.spacing.md },
+  actionMenuIcon: { width: 32, height: 32, borderRadius: theme.radius.sm, alignItems: "center", justifyContent: "center" },
+  actionMenuTitle: { color: theme.colors.text.primary, fontSize: theme.font.sizes.sm, fontWeight: theme.font.weights.semibold },
+  actionMenuSub: { color: theme.colors.text.muted, fontSize: 11, marginTop: 1 },
+  actionMenuDivider: { height: 1, backgroundColor: theme.colors.bg.border, marginLeft: 56 },
   empty: { alignItems: "center", paddingTop: 80 },
   emptyIcon: { fontSize: 48 },
   emptyTitle: { color: theme.colors.text.primary, fontSize: theme.font.sizes.xl, fontWeight: theme.font.weights.semibold, marginTop: theme.spacing.md },

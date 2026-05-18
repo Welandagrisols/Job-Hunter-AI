@@ -317,7 +317,27 @@ export default function JobCaptureScreen() {
             </View>
           )}
 
-          <Text style={styles.actionsTitle}>Generate with AI</Text>
+          {/* Primary CTA: open full AI suite with all job data prefilled */}
+          <TouchableOpacity
+            style={styles.aiSuiteBtn}
+            onPress={() => router.push({
+              pathname: "/(tabs)/ai-writer",
+              params: {
+                prefill_company: parsed.company || "",
+                prefill_role: parsed.role || "",
+                prefill_description: parsed.rawText || "",
+              },
+            })}
+          >
+            <Ionicons name="sparkles" size={20} color={theme.colors.bg.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiSuiteBtnTitle}>Open Full AI Suite</Text>
+              <Text style={styles.aiSuiteBtnSub}>Cover letter · CV tailor · Interview prep · Q&A · Follow-up</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.bg.primary} />
+          </TouchableOpacity>
+
+          <Text style={styles.actionsTitle}>Quick Generate</Text>
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.actionBtn, generating === "email" && styles.actionBtnDisabled]}
@@ -328,7 +348,7 @@ export default function JobCaptureScreen() {
                 ? <ActivityIndicator color={theme.colors.accent.cyan} size="small" />
                 : <Ionicons name="mail-outline" size={18} color={theme.colors.accent.cyan} />
               }
-              <Text style={styles.actionBtnText}>Application Email</Text>
+              <Text style={styles.actionBtnText}>Email</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -449,4 +469,7 @@ const styles = StyleSheet.create({
   saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: theme.spacing.sm, backgroundColor: theme.colors.accent.green, borderRadius: theme.radius.full, padding: theme.spacing.md },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: theme.colors.bg.primary, fontWeight: theme.font.weights.bold, fontSize: theme.font.sizes.md },
+  aiSuiteBtn: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md, backgroundColor: theme.colors.accent.cyan, borderRadius: theme.radius.lg, padding: theme.spacing.md },
+  aiSuiteBtnTitle: { color: theme.colors.bg.primary, fontWeight: theme.font.weights.bold, fontSize: theme.font.sizes.md },
+  aiSuiteBtnSub: { color: theme.colors.bg.primary + "cc", fontSize: theme.font.sizes.xs, marginTop: 2 },
 });
