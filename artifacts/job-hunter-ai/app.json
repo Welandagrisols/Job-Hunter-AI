@@ -35,6 +35,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c1760c28-47e2-4fbd-ad60-5147f2a134dd"
+      }
+    },
+    "owner": "wesleykoech"
   }
 }
