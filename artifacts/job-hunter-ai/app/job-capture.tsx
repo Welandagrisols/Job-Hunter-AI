@@ -9,6 +9,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { urlParser, ParsedJob } from "@/src/services/urlParser";
 import { db } from "@/src/services/storage";
 import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
+import { notificationService } from "@/src/services/notifications";
 import { theme } from "@/src/theme";
 
 type InputMode = "url" | "text";
@@ -114,7 +115,7 @@ export default function JobCaptureScreen() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await db.addApplication({
+      const saved = await db.addApplication({
         company: parsed.company || "Unknown Company",
         role: parsed.role || "Unknown Role",
         contact_email: parsed.contactEmail,
@@ -128,6 +129,15 @@ export default function JobCaptureScreen() {
         application_email: generatedEmail,
         notes: `Source: ${parsed.sourceName}`,
       });
+
+      // Schedule reminders in the background (non-blocking)
+      const company = parsed.company || "Unknown Company";
+      const role = parsed.role || "Unknown Role";
+      notificationService.scheduleFollowUpReminder(company, role, saved.id, 7);
+      if (parsed.deadline) {
+        notificationService.scheduleDeadlineReminder(company, role, parsed.deadline);
+      }
+
       setSaveSuccess(true);
     } catch (err: any) {
       setGenError(err.message || "Could not save application.");

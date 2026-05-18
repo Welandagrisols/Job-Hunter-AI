@@ -104,6 +104,38 @@ export const notificationService = {
     }
   },
 
+  async scheduleDeadlineReminder(
+    company: string,
+    role: string,
+    deadlineStr: string
+  ): Promise<void> {
+    try {
+      const deadline = new Date(deadlineStr);
+      if (isNaN(deadline.getTime())) return;
+
+      const reminderDate = new Date(deadline);
+      reminderDate.setDate(reminderDate.getDate() - 3);
+      reminderDate.setHours(9, 0, 0, 0);
+
+      if (reminderDate <= new Date()) return;
+
+      const hasPermission = await this.requestPermissions();
+      if (!hasPermission) return;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "⚠️ Application Deadline in 3 Days",
+          body: `${role} at ${company} closes on ${deadline.toLocaleDateString()}`,
+          sound: "default",
+          data: { type: "deadline_reminder", company, role },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: reminderDate },
+      });
+    } catch (err) {
+      console.warn("Deadline reminder failed:", err);
+    }
+  },
+
   async cancelAll(): Promise<void> {
     await Notifications.cancelAllScheduledNotificationsAsync();
   },

@@ -3,24 +3,27 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const GEMINI_KEY_STORAGE = "jh_gemini_api_key";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
 
-const DEFAULT_PROFILE = `
-Name: Wesley Kipkemoi Koech
-Profession: Agronomist & Soil Scientist
-Location: Nairobi, Kenya
-Experience: 5+ years in soil fertility management, fertilizer optimization, agricultural research, and field training
-Current: Runs his own agricultural consultancy company
-Skills:
-- Soil fertility management & analysis
-- Fertilizer optimization & recommendations
-- Agricultural research & data analysis
-- Field training & farmer extension
-- Digital agricultural tools
-- Crop management advisory
-Industry: Agriculture, Agri-tech, East African agri-development
-`;
-
 async function getUserProfile(): Promise<string> {
   try {
+    // 1. Check editable user profile first
+    const profileData = await AsyncStorage.getItem("@jobhunter:user_profile");
+    if (profileData) {
+      const p = JSON.parse(profileData);
+      if (p.name || p.profession) {
+        return `Name: ${p.name || "Wesley Kipkemoi Koech"}
+Profession: ${p.profession || "Agronomist"}
+Location: ${p.location || "Nairobi, Kenya"}
+Experience: ${p.yearsExperience || "5+"} years
+Current Role: ${p.currentRole || "Agricultural Consultant"}
+Key Skills: ${p.keySkills || "Soil fertility, fertilizer optimization, agricultural research"}
+Notable Experience: ${p.notableExperience || "IFDC Sudan project"}
+Target Roles: ${p.targetRoles || "Agronomist, Field Officer, Research roles in East Africa"}`;
+      }
+    }
+  } catch {}
+
+  try {
+    // 2. Fall back to CV vault text
     const data = await AsyncStorage.getItem("@jobhunter:cv_vault");
     if (data) {
       const vault = JSON.parse(data);
@@ -29,7 +32,16 @@ async function getUserProfile(): Promise<string> {
       }
     }
   } catch {}
-  return DEFAULT_PROFILE;
+
+  // 3. Hardcoded default
+  return `Name: Wesley Kipkemoi Koech
+Profession: Agronomist & Soil Scientist
+Location: Nairobi, Kenya
+Experience: 5+ years in soil fertility management, fertilizer optimization, agricultural research, and field training
+Current: Runs his own agricultural consultancy company
+Skills: Soil fertility management, fertilizer optimization, agricultural research, field training, digital agricultural tools, crop management advisory
+Notable: IFDC Sudan project (soil health & fertilizer programs across Sudan)
+Industry: Agriculture, Agri-tech, East African agri-development, international NGOs`;
 }
 
 async function getApiKey(): Promise<string> {

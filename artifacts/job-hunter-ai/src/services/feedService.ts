@@ -307,6 +307,14 @@ const PROXY = "https://api.allorigins.win/get?url=";
 const PER_REQUEST_TIMEOUT = 5000;
 const OVERALL_FEED_TIMEOUT = 25000;
 
+function cleanHtml(str: string): string {
+  return str.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function parseRSSItems(xmlText: string, sourceName: string): RawJob[] {
   const items: RawJob[] = [];
 
@@ -317,22 +325,31 @@ function parseRSSItems(xmlText: string, sourceName: string): RawJob[] {
       const item = match[1];
 
       const getTag = (tag: string): string => {
-        const m = item.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\/${tag}>`, "i"))
-          || item.match(new RegExp(`<${tag}[^>]*>([^<]*)<\/${tag}>`, "i"));
+        const m = item.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, "i"))
+          || item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
         return m ? m[1].trim() : "";
       };
 
       const title = getTag("title");
       const link = getTag("link") || getTag("guid");
-      const description = getTag("description");
+
+      // Try richer content sources in priority order
+      const rawDesc =
+        getTag("content:encoded") ||
+        getTag("description") ||
+        getTag("summary") ||
+        getTag("dc:description") ||
+        "";
+
       const pubDate = getTag("pubDate") || getTag("dc:date") || new Date().toISOString();
 
       if (title && link) {
+        const description = cleanHtml(rawDesc).slice(0, 600);
         items.push({
-          id: btoa(link).slice(0, 20),
-          title,
+          id: btoa(encodeURIComponent(link)).slice(0, 20),
+          title: cleanHtml(title),
           url: link,
-          description: description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500),
+          description,
           publishedAt: new Date(pubDate).toISOString(),
           source: sourceName,
           relevanceScore: 0,
@@ -485,9 +502,18 @@ export const feedService = {
       }
     });
 
-    const unique = allJobs.filter((job, idx, arr) =>
-      arr.findIndex((j) => j.url === job.url) === idx
-    );
+    // Deduplicate: first by exact URL, then by normalised title (same job from multiple boards)
+    const seenUrls = new Set<string>();
+    const seenTitles = new Set<string>();
+    const unique = allJobs.filter((job) => {
+      if (seenUrls.has(job.url)) return false;
+      seenUrls.add(job.url);
+      const t = normalizeTitle(job.title);
+      // Only title-dedup when title is long enough to be specific (>20 chars)
+      if (t.length > 20 && seenTitles.has(t)) return false;
+      if (t.length > 20) seenTitles.add(t);
+      return true;
+    });
 
     const withNewFlag = unique.map((job) => ({
       ...job,

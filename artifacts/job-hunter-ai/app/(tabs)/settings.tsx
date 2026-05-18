@@ -5,7 +5,7 @@ import {
   Platform, Clipboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { gmailService, getOAuthRedirectUri } from "@/src/services/gmail";
 import { useColors } from "@/hooks/useColors";
@@ -18,6 +18,7 @@ import { notificationService } from "@/src/services/notifications";
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const [gmailConnected, setGmailConnected] = useState(false);
@@ -184,6 +185,25 @@ export default function SettingsScreen() {
       <View style={{ paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 16 }}>
         <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>Settings</Text>
       </View>
+
+      {/* My Profile */}
+      <SectionLabel title="My Profile" colors={colors} />
+      <Card colors={colors}>
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}
+          onPress={() => router.push("/profile")}
+          activeOpacity={0.7}
+        >
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary + "22", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="person-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 15 }}>Edit My Profile</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Name, skills, experience — used by all AI features</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      </Card>
 
       {/* Setup status */}
       <SectionLabel title="Setup Status" colors={colors} />

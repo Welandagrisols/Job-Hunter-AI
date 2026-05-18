@@ -4,6 +4,7 @@ const KEYS = {
   APPLICATIONS: "@jobhunter:applications",
   ALERTS: "@jobhunter:alerts",
   CV_VAULT: "@jobhunter:cv_vault",
+  USER_PROFILE: "@jobhunter:user_profile",
 };
 
 function generateId(): string {
@@ -209,7 +210,24 @@ export const db = {
   },
 
   async clearAll(): Promise<void> {
-    await AsyncStorage.multiRemove([KEYS.APPLICATIONS, KEYS.ALERTS, KEYS.CV_VAULT]);
+    await AsyncStorage.multiRemove([KEYS.APPLICATIONS, KEYS.ALERTS, KEYS.CV_VAULT, KEYS.USER_PROFILE]);
+  },
+
+  // ============ USER PROFILE ============
+  async getUserProfile(): Promise<UserProfile> {
+    try {
+      const data = await AsyncStorage.getItem(KEYS.USER_PROFILE);
+      return data ? JSON.parse(data) : DEFAULT_USER_PROFILE;
+    } catch {
+      return DEFAULT_USER_PROFILE;
+    }
+  },
+
+  async saveUserProfile(profile: UserProfile): Promise<void> {
+    await AsyncStorage.setItem(KEYS.USER_PROFILE, JSON.stringify({
+      ...profile,
+      updatedAt: new Date().toISOString(),
+    }));
   },
 };
 
@@ -280,3 +298,27 @@ export interface AppStats {
   thisWeek: number;
   dailyCounts: Record<string, number>;
 }
+
+export interface UserProfile {
+  name: string;
+  profession: string;
+  location: string;
+  yearsExperience: string;
+  currentRole: string;
+  keySkills: string;
+  notableExperience: string;
+  targetRoles: string;
+  updatedAt: string | null;
+}
+
+export const DEFAULT_USER_PROFILE: UserProfile = {
+  name: "Wesley Kipkemoi Koech",
+  profession: "Agronomist & Soil Scientist",
+  location: "Nairobi, Kenya",
+  yearsExperience: "5+",
+  currentRole: "Agricultural Consultant",
+  keySkills: "Soil fertility management, fertilizer optimization, agricultural research, field training, crop management, digital agricultural tools",
+  notableExperience: "IFDC Sudan project (soil health & fertilizer optimization), runs own agricultural consultancy",
+  targetRoles: "Agronomist, Soil Scientist, Agricultural Officer, Field Officer, Research Officer, Agri-development roles in East Africa and international NGOs",
+  updatedAt: null,
+};
