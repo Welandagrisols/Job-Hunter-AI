@@ -304,6 +304,8 @@ export const JOB_SOURCES: JobSource[] = [
 
 const PROXY2 = "https://api.rss2json.com/v1/api.json?rss_url=";
 const PROXY = "https://api.allorigins.win/get?url=";
+const PER_REQUEST_TIMEOUT = 5000;
+const OVERALL_FEED_TIMEOUT = 25000;
 
 function parseRSSItems(xmlText: string, sourceName: string): RawJob[] {
   const items: RawJob[] = [];
@@ -346,40 +348,63 @@ function parseRSSItems(xmlText: string, sourceName: string): RawJob[] {
   return items.slice(0, 15);
 }
 
+function mapRss2JsonItems(items: any[], sourceName: string): RawJob[] {
+  return items.map((item: any) => ({
+    id: btoa(item.link || item.guid || item.title).slice(0, 20),
+    title: item.title || "",
+    url: item.link || item.guid || "",
+    description: (item.description || item.content || "").replace(/<[^>]+>/g, " ").trim().slice(0, 500),
+    publishedAt: new Date(item.pubDate || Date.now()).toISOString(),
+    source: sourceName,
+    relevanceScore: 0,
+    relevanceReason: "",
+    isNew: true,
+  })).slice(0, 15);
+}
+
 async function fetchRSS(source: JobSource): Promise<RawJob[]> {
-  const urls = [source.rssUrl, source.rssUrlGeneral].filter(Boolean);
+  const urls = [source.rssUrl, source.rssUrlGeneral].filter((u, i, a) => u && a.indexOf(u) === i) as string[];
 
   for (const rssUrl of urls) {
+    // 1. Try direct fetch first — works in native APK without any proxy
     try {
-      const rss2jsonUrl = `${PROXY2}${encodeURIComponent(rssUrl)}`;
-      const r1 = await fetch(rss2jsonUrl, { signal: AbortSignal.timeout(8000) });
-      if (r1.ok) {
-        const data = await r1.json();
-        if (data.status === "ok" && data.items?.length > 0) {
-          return data.items.map((item: any) => ({
-            id: btoa(item.link || item.guid || item.title).slice(0, 20),
-            title: item.title || "",
-            url: item.link || item.guid || "",
-            description: (item.description || item.content || "").replace(/<[^>]+>/g, " ").trim().slice(0, 500),
-            publishedAt: new Date(item.pubDate || Date.now()).toISOString(),
-            source: source.name,
-            relevanceScore: 0,
-            relevanceReason: "",
-            isNew: true,
-          })).slice(0, 15);
+      const r = await fetch(rssUrl, {
+        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
+        headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+      });
+      if (r.ok) {
+        const text = await r.text();
+        if (text.includes("<item>")) {
+          const items = parseRSSItems(text, source.name);
+          if (items.length > 0) return items;
         }
       }
+    } catch {}
 
-      const proxyUrl = `${PROXY}${encodeURIComponent(rssUrl)}`;
-      const r2 = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-      if (r2.ok) {
-        const data = await r2.json();
+    // 2. Fall back to rss2json proxy (web / Expo Go)
+    try {
+      const r = await fetch(`${PROXY2}${encodeURIComponent(rssUrl)}`, {
+        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (data.status === "ok" && data.items?.length > 0) {
+          return mapRss2JsonItems(data.items, source.name);
+        }
+      }
+    } catch {}
+
+    // 3. Last resort: allorigins proxy
+    try {
+      const r = await fetch(`${PROXY}${encodeURIComponent(rssUrl)}`, {
+        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
+      });
+      if (r.ok) {
+        const data = await r.json();
         const items = parseRSSItems(data.contents || "", source.name);
         if (items.length > 0) return items;
       }
-    } catch (err) {
-      console.warn(`Failed to fetch ${source.name}:`, err);
-    }
+    } catch {}
   }
 
   return [];
