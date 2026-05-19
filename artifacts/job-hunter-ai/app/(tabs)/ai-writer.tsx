@@ -5,10 +5,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { aiService } from "@/src/services/claude";
 import { useColors } from "@/hooks/useColors";
 
@@ -49,6 +50,7 @@ export default function AIWriterScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const params = useLocalSearchParams<{ prefill_company?: string; prefill_role?: string; prefill_description?: string }>();
 
+  const router = useRouter();
   const [mode, setMode] = useState<WritingMode>("cover_letter");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
@@ -60,6 +62,8 @@ export default function AIWriterScreen() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [hasGeminiKey, setHasGeminiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (params.prefill_company) setCompany(params.prefill_company);
@@ -67,7 +71,13 @@ export default function AIWriterScreen() {
     if (params.prefill_description) setJobDescription(params.prefill_description);
   }, [params.prefill_company, params.prefill_role, params.prefill_description]);
 
-  const resetResults = () => { setResult(""); setKeywordResult(null); setCopied(false); };
+  useEffect(() => {
+    AsyncStorage.getItem("jh_gemini_api_key")
+      .then((k) => setHasGeminiKey(!!k && k.trim().length > 0))
+      .catch(() => setHasGeminiKey(false));
+  }, []);
+
+  const resetResults = () => { setResult(""); setKeywordResult(null); setCopied(false); setErrorMsg(""); };
 
   const generate = async () => {
     if (mode === "keyword_match") {
@@ -104,7 +114,8 @@ export default function AIWriterScreen() {
         setResult(await aiService.generateFollowUp(company, role, parseInt(daysSince) || 7));
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to generate. Check your Anthropic API key in Settings.");
+      const msg = err.message || "Generation failed. Please try again.";
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
@@ -188,6 +199,28 @@ export default function AIWriterScreen() {
         <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>AI Writer</Text>
         <Text style={{ color: colors.primary, fontSize: 13, marginTop: 2 }}>Powered by Gemini AI</Text>
       </View>
+
+      {/* No API key warning */}
+      {hasGeminiKey === false && (
+        <TouchableOpacity
+          onPress={() => router.push("/settings")}
+          style={{
+            flexDirection: "row", alignItems: "center", gap: 10,
+            marginHorizontal: 16, marginBottom: 12, padding: 14,
+            backgroundColor: colors.orange + "20", borderRadius: 14,
+            borderWidth: 1, borderColor: colors.orange + "55",
+          }}
+        >
+          <Ionicons name="warning-outline" size={20} color={colors.orange} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.orange, fontWeight: "700", fontSize: 14 }}>Gemini API key not set</Text>
+            <Text style={{ color: colors.orange, fontSize: 12, marginTop: 2, opacity: 0.85 }}>
+              Tap here → Settings → API Keys to add your free Gemini key
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.orange} />
+        </TouchableOpacity>
+      )}
 
       <ScrollView
         horizontal
@@ -307,6 +340,39 @@ export default function AIWriterScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Inline error display */}
+        {errorMsg ? (
+          <View style={{
+            flexDirection: "row", alignItems: "flex-start", gap: 10,
+            backgroundColor: colors.destructive + "18", borderRadius: 12,
+            padding: 14, borderWidth: 1, borderColor: colors.destructive + "44", marginTop: 4,
+          }}>
+            <Ionicons name="alert-circle-outline" size={20} color={colors.destructive} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.destructive, fontWeight: "700", fontSize: 14, marginBottom: 2 }}>
+                Generation failed
+              </Text>
+              <Text style={{ color: colors.destructive, fontSize: 13, lineHeight: 18, opacity: 0.9 }}>
+                {errorMsg}
+              </Text>
+              {errorMsg.toLowerCase().includes("api key") && (
+                <TouchableOpacity
+                  onPress={() => router.push("/settings")}
+                  style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 4 }}
+                >
+                  <Text style={{ color: colors.destructive, fontWeight: "700", fontSize: 13, textDecorationLine: "underline" }}>
+                    Open Settings → API Keys
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color={colors.destructive} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => setErrorMsg("")}>
+              <Ionicons name="close" size={18} color={colors.destructive} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       {/* ── Keyword Match result ── */}
