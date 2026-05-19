@@ -186,7 +186,7 @@ export default function AIWriterScreen() {
     >
       <View style={{ paddingHorizontal: 16, paddingTop: topPad + 16, paddingBottom: 8 }}>
         <Text style={{ fontSize: 28, fontWeight: "700", color: colors.foreground }}>AI Writer</Text>
-        <Text style={{ color: colors.primary, fontSize: 13, marginTop: 2 }}>Powered by Claude AI</Text>
+        <Text style={{ color: colors.primary, fontSize: 13, marginTop: 2 }}>Powered by Gemini AI</Text>
       </View>
 
       <ScrollView

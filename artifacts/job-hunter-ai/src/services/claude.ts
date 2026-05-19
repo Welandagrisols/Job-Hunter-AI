@@ -1,4 +1,3 @@
-import { getApiBase } from "../config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEFAULT_PROFILE = `
@@ -16,73 +15,151 @@ async function getUserProfile(): Promise<string> {
     const data = await AsyncStorage.getItem("@jobhunter:cv_vault");
     if (data) {
       const vault = JSON.parse(data);
-      if (vault.cvText && vault.cvText.length > 50) {
-        return vault.cvText;
+      if (vault.cvText && vault.cvText.length > 50) return vault.cvText;
+    }
+    const profileData = await AsyncStorage.getItem("@jobhunter:user_profile");
+    if (profileData) {
+      const p = JSON.parse(profileData);
+      if (p.name || p.profession) {
+        return `Name: ${p.name || "Wesley Kipkemoi Koech"}
+Profession: ${p.profession || "Agronomist & Soil Scientist"}
+Location: ${p.location || "Nairobi, Kenya"}
+Experience: ${p.yearsExperience || "5+"} years
+Key Skills: ${p.keySkills || "Soil fertility, fertilizer optimization, agricultural research"}
+Target Roles: ${p.targetRoles || "Agronomist, Field Officer, Research roles in East Africa"}`;
       }
     }
   } catch {}
   return DEFAULT_PROFILE;
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 1500): Promise<string> {
-  const response = await fetch(`${getApiBase()}/api/claude`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-      max_tokens: maxTokens,
-    }),
-  });
+async function callGemini(prompt: string, maxTokens = 1500): Promise<string> {
+  const apiKey = await AsyncStorage.getItem("jh_gemini_api_key").catch(() => null);
+  if (!apiKey) {
+    throw new Error("Gemini API key not set. Go to More → Settings → API Keys to add your Gemini key.");
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens },
+      }),
+    }
+  );
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || "AI service error. Check your Anthropic API key in settings.");
+    const msg = err.error?.message || "Gemini API error";
+    if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+      throw new Error("Invalid Gemini API key. Please check Settings → API Keys.");
+    }
+    throw new Error(msg);
   }
 
   const data = await response.json();
-  return data.content[0].text;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No content returned. Please try again.");
+  return text;
 }
 
 export const aiService = {
   async generateApplicationEmail(jobTitle: string, company: string, jobDescription: string): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are a professional job application writer. Write concise, confident emails for the candidate described below.\n\nCandidate profile:\n${profile}\n\nWrite emails that are direct and confident (3-4 short paragraphs). End with a professional sign-off. Include placeholder [Phone] and [Email] in signature.`,
-      `Write a job application email:\nCompany: ${company}\nJob Title: ${jobTitle}\nJob Description: ${jobDescription}\n\nWrite the full email body (not subject line).`
-    );
+    return callGemini(`You are a professional job application writer for the following candidate:
+
+${profile}
+
+Write a job application email for:
+Company: ${company}
+Job Title: ${jobTitle}
+Job Description: ${jobDescription}
+
+Instructions: Write a direct, confident email (3-4 short paragraphs). End with a professional sign-off. Include placeholder [Phone] and [Email] in the signature. Write only the email body — no subject line.`);
   },
 
   async generateCoverLetter(jobTitle: string, company: string, jobDescription: string): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are a professional cover letter writer. Write compelling, tailored cover letters for the candidate described below.\n\nCandidate profile:\n${profile}\n\nCover letters: one page max (4 paragraphs), formal letter format with date and address headers.`,
-      `Write a cover letter for:\nCompany: ${company}\nRole: ${jobTitle}\nJob Description: ${jobDescription}`
-    );
+    return callGemini(`You are a professional cover letter writer for the following candidate:
+
+${profile}
+
+Write a cover letter for:
+Company: ${company}
+Role: ${jobTitle}
+Job Description: ${jobDescription}
+
+Instructions: One page max (4 paragraphs), formal letter format with date and address headers. Tailored, compelling, and specific to this role. Sound confident and genuine.`, 1500);
   },
 
   async tailorCVPoints(jobDescription: string): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are a CV optimization expert. Given a job description, generate tailored CV bullet points for the candidate described below.\n\nCandidate profile:\n${profile}\n\nOutput format:\nPROFESSIONAL SUMMARY:\n[2-3 sentence tailored summary]\n\nKEY ACHIEVEMENTS TO HIGHLIGHT:\n• [bullet]\n\nSKILLS TO EMPHASIZE:\n[comma-separated list]`,
-      `Tailor the candidate's CV for this job description:\n${jobDescription}`
-    );
+    return callGemini(`You are a CV optimization expert. Given the following candidate profile and job description, generate tailored CV content.
+
+Candidate profile:
+${profile}
+
+Job Description:
+${jobDescription}
+
+Output exactly in this format:
+PROFESSIONAL SUMMARY:
+[2-3 sentence tailored summary]
+
+KEY ACHIEVEMENTS TO HIGHLIGHT:
+• [bullet]
+• [bullet]
+• [bullet]
+
+SKILLS TO EMPHASIZE:
+[comma-separated list relevant to this role]`);
   },
 
   async generateInterviewPrep(jobTitle: string, company: string, jobDescription: string): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are an interview coach. Generate interview preparation for the candidate described below.\n\nCandidate profile:\n${profile}\n\nFormat:\nLIKELY QUESTIONS:\n1. [question] → SUGGESTED ANSWER: [brief answer]\n\nTECHNICAL QUESTIONS TO PREPARE FOR:\n• [question]\n\nQUESTIONS TO ASK THE INTERVIEWER:\n• [smart question]`,
-      `Prepare interview questions and answers for:\nCompany: ${company}\nRole: ${jobTitle}\nJob Description: ${jobDescription}`
-    );
+    return callGemini(`You are an interview coach preparing the following candidate:
+
+${profile}
+
+Prepare for:
+Company: ${company}
+Role: ${jobTitle}
+Job Description: ${jobDescription}
+
+Format your response exactly like this:
+LIKELY QUESTIONS:
+1. [question] → SUGGESTED ANSWER: [brief tailored answer]
+2. [question] → SUGGESTED ANSWER: [brief tailored answer]
+3. [question] → SUGGESTED ANSWER: [brief tailored answer]
+4. [question] → SUGGESTED ANSWER: [brief tailored answer]
+5. [question] → SUGGESTED ANSWER: [brief tailored answer]
+
+TECHNICAL QUESTIONS TO PREPARE FOR:
+• [question]
+• [question]
+• [question]
+
+QUESTIONS TO ASK THE INTERVIEWER:
+• [smart question]
+• [smart question]
+• [smart question]`, 2000);
   },
 
   async generateFollowUp(company: string, role: string, daysSinceApplied: number): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are a professional email writer. Write polite, confident follow-up emails for the candidate described below.\n\nCandidate profile:\n${profile}\n\nKeep follow-ups: short (3-4 sentences), polite but confident, reference the specific role, reaffirm interest, ask for status update.`,
-      `Write a follow-up email for:\nCompany: ${company}\nRole: ${role}\nDays since application: ${daysSinceApplied}\n\nWrite just the email body.`
-    );
+    return callGemini(`You are a professional email writer for the following candidate:
+
+${profile}
+
+Write a follow-up email:
+Company: ${company}
+Role: ${role}
+Days since application: ${daysSinceApplied}
+
+Instructions: Short (3-4 sentences), polite but confident. Reference the specific role. Reaffirm interest. Ask for a status update. Write only the email body.`);
   },
 
   async analyzeKeywords(jobDescription: string): Promise<{
@@ -94,11 +171,22 @@ export const aiService = {
     recommendation: string;
   }> {
     const profile = await getUserProfile();
-    const result = await callClaude(
-      `You are a resume keyword matcher. Compare a candidate's profile against a job description and return ONLY valid JSON, no markdown, no explanation.\n\nCandidate profile:\n${profile}`,
-      `Analyse how well the candidate's profile matches this job description. Extract the 10-15 most important keywords/skills from the job description, then check which ones the candidate has.\n\nJob Description:\n${jobDescription}\n\nReturn JSON only:\n{\n  "matched": ["keyword1", "keyword2"],\n  "missing": ["keyword3", "keyword4"],\n  "recommendation": "2-3 sentence advice on how to strengthen the application or which gaps to address"\n}`,
-      800
-    );
+    const result = await callGemini(`You are a resume keyword matcher. Compare the candidate profile against the job description and return ONLY valid JSON with no markdown, no explanation, no code fences.
+
+Candidate profile:
+${profile}
+
+Job Description:
+${jobDescription}
+
+Extract the 10-15 most important keywords/skills from the job description, check which ones the candidate has.
+
+Return this JSON and nothing else:
+{
+  "matched": ["keyword1", "keyword2"],
+  "missing": ["keyword3", "keyword4"],
+  "recommendation": "2-3 sentence advice on how to strengthen the application"
+}`, 800);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
@@ -114,16 +202,21 @@ export const aiService = {
         recommendation: parsed.recommendation || "",
       };
     } catch {
-      throw new Error("Could not analyse keywords. Please try again.");
+      throw new Error("Could not parse keyword analysis. Please try again.");
     }
   },
 
   async answerApplicationQuestion(question: string, company: string, role: string): Promise<string> {
     const profile = await getUserProfile();
-    return callClaude(
-      `You are an expert job application coach helping a candidate answer specific application form questions and essay prompts.\n\nCandidate profile:\n${profile}\n\nGuidelines:\n- Answer in first person as the candidate\n- Be specific and genuine, referencing their real experience\n- Keep answers concise (150-250 words) unless the question demands more\n- Tailor to the specific company and role\n- Sound confident and natural, not robotic`,
-      `Answer this application question for a ${role} role at ${company}:\n\n"${question}"\n\nWrite the candidate's answer directly (do not include the question or any preamble).`
-    );
+    return callGemini(`You are an expert job application coach for the following candidate:
+
+${profile}
+
+Answer this application question for a ${role} role at ${company}:
+
+"${question}"
+
+Instructions: Answer in first person as the candidate. Be specific, reference their real experience. Keep the answer 150-250 words unless the question demands more. Sound confident and natural. Write the answer directly — no preamble or question restated.`);
   },
 
   async classifyEmail(subject: string, body: string, company: string): Promise<{
@@ -132,10 +225,27 @@ export const aiService = {
     suggestedReply: string;
     urgency: "high" | "medium" | "low";
   }> {
-    const result = await callClaude(
-      `You are an email classifier for job applications. Analyze recruiter emails and return ONLY valid JSON, no markdown, no explanation.\n\nClassifications:\n- interview_invite: They want to schedule an interview\n- offer: Job offer extended\n- rejection: Application unsuccessful\n- assessment: Technical test or assignment sent\n- follow_up: They need more info\n- other: General communication`,
-      `Classify this recruiter email for a job application at ${company}:\n\nSubject: ${subject}\nBody: ${body}\n\nReturn JSON only:\n{\n  "classification": "interview_invite|offer|rejection|assessment|follow_up|other",\n  "summary": "1-2 sentence plain English summary",\n  "suggestedReply": "A professional reply the candidate should send",\n  "urgency": "high|medium|low"\n}`
-    );
+    const result = await callGemini(`You are an email classifier for job applications. Analyze the recruiter email and return ONLY valid JSON with no markdown, no code fences, no explanation.
+
+Classifications:
+- interview_invite: They want to schedule an interview
+- offer: Job offer extended
+- rejection: Application unsuccessful
+- assessment: Technical test or assignment sent
+- follow_up: They need more info
+- other: General communication
+
+Email from ${company}:
+Subject: ${subject}
+Body: ${body}
+
+Return this JSON and nothing else:
+{
+  "classification": "interview_invite|offer|rejection|assessment|follow_up|other",
+  "summary": "1-2 sentence plain English summary",
+  "suggestedReply": "A professional reply the candidate should send",
+  "urgency": "high|medium|low"
+}`, 600);
 
     try {
       const clean = result.replace(/```json|```/g, "").trim();
