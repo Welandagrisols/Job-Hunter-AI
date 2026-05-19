@@ -47,9 +47,23 @@ export default function FeedScreen() {
         setProgress((prev) => ({ ...prev, [source]: count }));
       });
 
-      setJobs(fresh);
-      setLastFetch(new Date());
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      if (fresh.length > 0) {
+        setJobs(fresh);
+        setLastFetch(new Date());
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      } else {
+        // All sources returned nothing — show cached results so jobs aren't lost
+        const cached = await feedService.getCachedFeed();
+        const last = await feedService.getLastFetchTime();
+        if (cached.length > 0) {
+          setJobs(cached);
+          setLastFetch(last);
+          Alert.alert("Using cached jobs", "Could not reach job boards right now. Showing your last saved results.");
+        } else {
+          Alert.alert("No jobs found", "Could not load jobs from any source. Check your internet connection and try again.");
+        }
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      }
     } catch {
       Alert.alert("Feed Error", "Some sources could not be fetched. Showing cached results.");
       await loadCached();

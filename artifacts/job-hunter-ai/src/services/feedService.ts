@@ -304,8 +304,14 @@ export const JOB_SOURCES: JobSource[] = [
 
 const PROXY2 = "https://api.rss2json.com/v1/api.json?rss_url=";
 const PROXY = "https://api.allorigins.win/get?url=";
-const PER_REQUEST_TIMEOUT = 5000;
-const OVERALL_FEED_TIMEOUT = 25000;
+const PER_REQUEST_TIMEOUT = 8000;
+const OVERALL_FEED_TIMEOUT = 40000;
+
+function fetchWithTimeout(url: string, options: RequestInit = {}, ms = PER_REQUEST_TIMEOUT): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 function cleanHtml(str: string): string {
   return str.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
@@ -385,8 +391,7 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
   for (const rssUrl of urls) {
     // 1. Try direct fetch first — works in native APK without any proxy
     try {
-      const r = await fetch(rssUrl, {
-        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
+      const r = await fetchWithTimeout(rssUrl, {
         headers: { Accept: "application/rss+xml, application/xml, text/xml" },
       });
       if (r.ok) {
@@ -400,9 +405,7 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
 
     // 2. Fall back to rss2json proxy (web / Expo Go)
     try {
-      const r = await fetch(`${PROXY2}${encodeURIComponent(rssUrl)}`, {
-        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
-      });
+      const r = await fetchWithTimeout(`${PROXY2}${encodeURIComponent(rssUrl)}`);
       if (r.ok) {
         const data = await r.json();
         if (data.status === "ok" && data.items?.length > 0) {
@@ -413,9 +416,7 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
 
     // 3. Last resort: allorigins proxy
     try {
-      const r = await fetch(`${PROXY}${encodeURIComponent(rssUrl)}`, {
-        signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT),
-      });
+      const r = await fetchWithTimeout(`${PROXY}${encodeURIComponent(rssUrl)}`);
       if (r.ok) {
         const data = await r.json();
         const items = parseRSSItems(data.contents || "", source.name);
@@ -532,8 +533,11 @@ export const feedService = {
       };
     });
 
-    await AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(feedJobs));
-    await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
+    // Only overwrite the cache if we got real results — never wipe old jobs with an empty fetch
+    if (feedJobs.length > 0) {
+      await AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(feedJobs));
+      await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
+    }
 
     return feedJobs;
   },
