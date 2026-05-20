@@ -7,18 +7,93 @@ const LAST_FETCH_KEY = "jh_last_fetch";
 const SOURCES_KEY = "@jobhunter:feed_sources";
 const KEYWORD_FILTERS_KEY = "@jobhunter:keyword_filters";
 
-const WESLEY_KEYWORDS = [
-  "agronomist", "agronomy", "soil", "fertilizer", "fertiliser",
-  "agriculture", "agricultural", "crop", "farm", "horticulture",
-  "field officer", "extension", "research", "soil scientist",
-  "agrovet", "seeds", "inputs", "value chain", "food systems",
-  "training", "coordinator", "kenya", "east africa", "nairobi",
-  "soil health", "soil fertility", "sustainable agriculture",
-  "climate smart", "agri-food", "food security", "nutrition",
-  "agribusiness", "irrigation", "plant", "pest", "conservation",
-  "ifdc", "icipe", "agra", "biovision", "ocp", "cgiar",
-  "sudan", "uganda", "tanzania", "ethiopia", "zambia", "malawi",
-  "southern africa", "west africa", "africa",
+// Minimum relevance score for a job to appear in the feed at all
+const MIN_DISPLAY_SCORE = 15;
+
+// Keywords that strongly indicate this is an agricultural/development job
+const WESLEY_KEYWORDS: Array<{ word: string; score: number }> = [
+  // Core agronomy — high value
+  { word: "agronomist", score: 35 },
+  { word: "agronomy", score: 35 },
+  { word: "soil scientist", score: 35 },
+  { word: "soil science", score: 30 },
+  { word: "soil health", score: 30 },
+  { word: "soil fertility", score: 30 },
+  { word: "fertilizer", score: 25 },
+  { word: "fertiliser", score: 25 },
+  { word: "crop production", score: 25 },
+  { word: "crop management", score: 25 },
+  { word: "plant science", score: 25 },
+  { word: "plant protection", score: 25 },
+  { word: "horticulture", score: 25 },
+  { word: "pest management", score: 25 },
+  { word: "integrated pest", score: 25 },
+  // Agriculture broad
+  { word: "agriculture", score: 20 },
+  { word: "agricultural", score: 20 },
+  { word: "agribusiness", score: 20 },
+  { word: "agrovet", score: 20 },
+  { word: "value chain", score: 20 },
+  { word: "food systems", score: 20 },
+  { word: "food security", score: 20 },
+  { word: "sustainable agriculture", score: 25 },
+  { word: "climate smart", score: 25 },
+  { word: "agri-food", score: 20 },
+  { word: "irrigation", score: 20 },
+  { word: "seeds", score: 15 },
+  { word: "inputs", score: 10 },
+  { word: "extension officer", score: 25 },
+  { word: "field officer", score: 15 },
+  { word: "conservation agriculture", score: 25 },
+  // Specific orgs (very high value)
+  { word: "ifdc", score: 40 },
+  { word: "icipe", score: 40 },
+  { word: "agra", score: 30 },
+  { word: "biovision", score: 35 },
+  { word: "ocp africa", score: 35 },
+  { word: "cgiar", score: 35 },
+  { word: "fao", score: 25 },
+  { word: "ilri", score: 35 },
+  { word: "cimmyt", score: 35 },
+  { word: "iita", score: 35 },
+  // Location (moderate — not enough alone)
+  { word: "nairobi", score: 10 },
+  { word: "kenya", score: 8 },
+  { word: "east africa", score: 10 },
+  { word: "uganda", score: 5 },
+  { word: "tanzania", score: 5 },
+  { word: "ethiopia", score: 5 },
+  { word: "zambia", score: 5 },
+  { word: "malawi", score: 5 },
+];
+
+// Keywords that strongly indicate a non-agricultural role — subtract from score
+const NEGATIVE_KEYWORDS: Array<{ word: string; penalty: number }> = [
+  { word: "truck driver", penalty: 60 },
+  { word: "matatu driver", penalty: 60 },
+  { word: "bus driver", penalty: 60 },
+  { word: "delivery driver", penalty: 60 },
+  { word: "lorry driver", penalty: 60 },
+  { word: "chauffeur", penalty: 60 },
+  { word: "taxi driver", penalty: 60 },
+  { word: "tuk tuk", penalty: 50 },
+  { word: "security guard", penalty: 60 },
+  { word: "watchman", penalty: 60 },
+  { word: "auto mechanic", penalty: 60 },
+  { word: "panel beater", penalty: 60 },
+  { word: "vulcanizer", penalty: 60 },
+  { word: "house help", penalty: 60 },
+  { word: "housekeeper", penalty: 60 },
+  { word: "waiter", penalty: 60 },
+  { word: "waitress", penalty: 60 },
+  { word: "barista", penalty: 60 },
+  { word: "bank teller", penalty: 60 },
+  { word: "hair stylist", penalty: 60 },
+  { word: "salon", penalty: 40 },
+  { word: "plumber", penalty: 50 },
+  { word: "electrician", penalty: 50 },
+  { word: "carpenter", penalty: 50 },
+  { word: "mason", penalty: 50 },
 ];
 
 export const DEFAULT_JOB_SOURCES: JobSource[] = [
@@ -414,10 +489,51 @@ function mapRss2JsonItems(items: any[], sourceName: string): RawJob[] {
   })).slice(0, 15);
 }
 
+// ReliefWeb has a proper JSON API — far more reliable than their RSS endpoint
+async function fetchReliefWebAPI(searchQuery: string, sourceName: string): Promise<RawJob[]> {
+  try {
+    const url =
+      `https://api.reliefweb.int/v1/jobs?appname=jobhunterai` +
+      `&query[value]=${encodeURIComponent(searchQuery)}` +
+      `&limit=20` +
+      `&fields[include][]=title` +
+      `&fields[include][]=url` +
+      `&fields[include][]=date` +
+      `&fields[include][]=body` +
+      `&fields[include][]=source` +
+      `&sort[]=date:desc`;
+    const r = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 12000);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return (data.data || []).map((item: any) => ({
+      id: `rw_${item.id}`,
+      title: item.fields?.title || "",
+      url: item.fields?.url || `https://reliefweb.int/node/${item.id}`,
+      description: cleanHtml(item.fields?.body || "").slice(0, 500),
+      publishedAt: new Date(item.fields?.date?.created || Date.now()).toISOString(),
+      source: sourceName,
+      relevanceScore: 0,
+      relevanceReason: "",
+      isNew: true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function fetchRSS(source: JobSource): Promise<RawJob[]> {
   const urls = [source.rssUrl, source.rssUrlGeneral].filter((u, i, a) => u && a.indexOf(u) === i) as string[];
 
   for (const rssUrl of urls) {
+    // Route reliefweb.int RSS URLs to their proper JSON API instead
+    const rwMatch = rssUrl.match(/reliefweb\.int\/jobs\/rss\.xml\?search=([^&]+)/);
+    if (rwMatch) {
+      const query = decodeURIComponent(rwMatch[1].replace(/\+/g, " "));
+      const items = await fetchReliefWebAPI(query, source.name);
+      if (items.length > 0) return items;
+      continue;
+    }
+
     try {
       const r = await fetchWithTimeout(rssUrl, {
         headers: { Accept: "application/rss+xml, application/xml, text/xml" },
@@ -462,19 +578,29 @@ async function scoreRelevance(jobs: RawJob[]): Promise<RawJob[]> {
     let score = 0;
     const matches: string[] = [];
 
-    WESLEY_KEYWORDS.forEach((kw) => {
-      if (text.includes(kw)) {
-        score += kw.length > 6 ? 20 : 10;
-        matches.push(kw);
+    // Positive scoring — weighted by specificity
+    for (const { word, score: pts } of WESLEY_KEYWORDS) {
+      if (text.includes(word)) {
+        score += pts;
+        matches.push(word);
       }
-    });
+    }
 
-    return { ...job, relevanceScore: Math.min(score, 100), relevanceReason: matches.slice(0, 3).join(", ") };
+    // Negative scoring — penalise clearly unrelated roles
+    for (const { word, penalty } of NEGATIVE_KEYWORDS) {
+      if (text.includes(word)) {
+        score -= penalty;
+      }
+    }
+
+    const finalScore = Math.max(0, Math.min(score, 100));
+    return { ...job, relevanceScore: finalScore, relevanceReason: matches.slice(0, 3).join(", ") };
   });
 
-  const needsAI = prescored.filter((j) => j.relevanceScore >= 10 && j.relevanceScore < 60);
+  // Only send borderline jobs to AI for refinement — skip clearly irrelevant ones
   const highScore = prescored.filter((j) => j.relevanceScore >= 60);
-  const lowScore = prescored.filter((j) => j.relevanceScore < 10);
+  const needsAI = prescored.filter((j) => j.relevanceScore >= MIN_DISPLAY_SCORE && j.relevanceScore < 60);
+  const tooLow = prescored.filter((j) => j.relevanceScore < MIN_DISPLAY_SCORE);
 
   if (needsAI.length > 0) {
     try {
@@ -485,7 +611,7 @@ async function scoreRelevance(jobs: RawJob[]): Promise<RawJob[]> {
       if (result && Array.isArray(result)) {
         result.forEach((r: any, i: number) => {
           if (batch[i]) {
-            batch[i].relevanceScore = r.score || batch[i].relevanceScore;
+            batch[i].relevanceScore = r.score ?? batch[i].relevanceScore;
             batch[i].relevanceReason = r.reason || batch[i].relevanceReason;
           }
         });
@@ -493,7 +619,8 @@ async function scoreRelevance(jobs: RawJob[]): Promise<RawJob[]> {
     } catch {}
   }
 
-  return [...highScore, ...needsAI, ...lowScore].sort((a, b) => b.relevanceScore - a.relevanceScore);
+  // Return all scored jobs — MIN_DISPLAY_SCORE gate is applied in fetchAllFeeds
+  return [...highScore, ...needsAI, ...tooLow].sort((a, b) => b.relevanceScore - a.relevanceScore);
 }
 
 export const feedService = {
@@ -637,7 +764,10 @@ export const feedService = {
 
     const scored = await scoreRelevance(withNewFlag);
 
-    const feedJobs: FeedJob[] = scored.map((job) => {
+    // Only show jobs that passed the minimum relevance threshold
+    const relevant = scored.filter((j) => j.relevanceScore >= MIN_DISPLAY_SCORE);
+
+    const feedJobs: FeedJob[] = relevant.map((job) => {
       const source = allSources.find((s) => s.name === job.source);
       return {
         ...job,
