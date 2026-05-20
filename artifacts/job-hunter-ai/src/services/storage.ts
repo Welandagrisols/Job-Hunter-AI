@@ -223,9 +223,40 @@ export const db = {
       sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
     });
 
+    // Average days to first response (interview, offer, or rejection)
+    const responded = apps.filter(
+      (a) => a.status === "interview" || a.status === "offer" || a.status === "rejected"
+    );
+    let avgDaysToResponse = 0;
+    if (responded.length > 0) {
+      const totalDays = responded.reduce((sum, app) => {
+        const applied = new Date(app.date_applied).getTime();
+        const firstStatusChange = app.timeline?.find(
+          (e) => e.type !== "created" && e.type !== "applied"
+        );
+        const responseTime = firstStatusChange
+          ? new Date(firstStatusChange.date).getTime()
+          : new Date(app.updated_at).getTime();
+        return sum + Math.max(0, Math.floor((responseTime - applied) / (1000 * 60 * 60 * 24)));
+      }, 0);
+      avgDaysToResponse = Math.round(totalDays / responded.length);
+    }
+
+    // Role performance: roles that reached interview/offer stage
+    const rolePerformance: Record<string, { applied: number; interviews: number }> = {};
+    apps.forEach((a) => {
+      const role = a.role || "Other";
+      if (!rolePerformance[role]) rolePerformance[role] = { applied: 0, interviews: 0 };
+      rolePerformance[role].applied++;
+      if (a.status === "interview" || a.status === "offer") {
+        rolePerformance[role].interviews++;
+      }
+    });
+
     return {
       total, interviews, offers, rejected, waiting,
       responseRate, interviewRate, offerRate, thisWeek,
+      avgDaysToResponse, rolePerformance,
       dailyCounts, sourceBreakdown,
     };
   },
@@ -321,6 +352,8 @@ export interface AppStats {
   interviewRate: number;
   offerRate: number;
   thisWeek: number;
+  avgDaysToResponse: number;
+  rolePerformance: Record<string, { applied: number; interviews: number }>;
   dailyCounts: Record<string, number>;
   sourceBreakdown: Record<string, number>;
 }
