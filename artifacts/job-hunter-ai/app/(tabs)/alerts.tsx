@@ -11,6 +11,7 @@ import * as Clipboard from "expo-clipboard";
 import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 import { EmailAlert, CLASSIFICATION_LABELS } from "@/src/types";
+import { FollowUpCandidate } from "@/src/services/storage";
 
 export default function MoreScreen() {
   const colors = useColors();
@@ -19,11 +20,16 @@ export default function MoreScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const [alerts, setAlerts] = useState<EmailAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followUpCandidates, setFollowUpCandidates] = useState<FollowUpCandidate[]>([]);
 
   const load = async () => {
     try {
-      const data = await db.getAlerts(false);
+      const [data, candidates] = await Promise.all([
+        db.getAlerts(false),
+        db.getFollowUpCandidates(),
+      ]);
       setAlerts(data);
+      setFollowUpCandidates(candidates);
     } catch (err) {
       console.error(err);
     } finally {
@@ -74,35 +80,54 @@ export default function MoreScreen() {
     emptyText: { color: colors.textMuted, marginTop: 8, fontSize: 13 },
   });
 
+  const urgentFollowUps = followUpCandidates.filter(
+    (c) => c.urgency === "critical" || c.urgency === "due"
+  ).length;
+
   const NAV_ITEMS = [
     {
       icon: "grid-outline", label: "Kanban Board",
       sub: "Visual drag-and-drop pipeline",
       color: colors.purple, bg: colors.purple + "22",
+      badge: 0,
       onPress: () => router.push("/kanban"),
     },
     {
-      icon: "create-outline", label: "Content Studio",
-      sub: "LinkedIn posts & blog articles",
-      color: colors.green, bg: colors.green + "22",
-      onPress: () => router.push("/content"),
+      icon: "notifications-outline", label: "Follow-up Reminders",
+      sub: followUpCandidates.length > 0
+        ? `${followUpCandidates.length} application${followUpCandidates.length !== 1 ? "s" : ""} need follow-up`
+        : "All caught up",
+      color: urgentFollowUps > 0 ? colors.destructive : colors.orange,
+      bg: urgentFollowUps > 0 ? colors.destructive + "22" : colors.orange + "22",
+      badge: urgentFollowUps,
+      onPress: () => router.push("/reminders"),
     },
     {
       icon: "bar-chart-outline", label: "Statistics",
       sub: "Your job hunt analytics",
       color: colors.gold, bg: colors.gold + "22",
+      badge: 0,
       onPress: () => router.push("/statistics"),
+    },
+    {
+      icon: "create-outline", label: "Content Studio",
+      sub: "LinkedIn posts & blog articles",
+      color: colors.green, bg: colors.green + "22",
+      badge: 0,
+      onPress: () => router.push("/content"),
     },
     {
       icon: "person-outline", label: "Profile",
       sub: "Edit your professional details",
       color: colors.orange, bg: colors.orange + "22",
+      badge: 0,
       onPress: () => router.push("/profile"),
     },
     {
       icon: "settings-outline", label: "Settings",
       sub: "API keys, Gmail, notifications",
       color: colors.textSecondary, bg: colors.elevated,
+      badge: 0,
       onPress: () => router.push("/settings"),
     },
   ];
@@ -138,9 +163,15 @@ export default function MoreScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.menuLabel}>{item.label}</Text>
-                <Text style={s.menuSub}>{item.sub}</Text>
+                <Text style={[s.menuSub, item.badge > 0 && { color: item.color }]}>{item.sub}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              {item.badge > 0 ? (
+                <View style={[s.badge, { backgroundColor: item.color + "22" }]}>
+                  <Text style={[s.badgeText, { color: item.color }]}>{item.badge}</Text>
+                </View>
+              ) : (
+                <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+              )}
             </TouchableOpacity>
           ))}
         </View>

@@ -5,6 +5,7 @@ const KEYS = {
   ALERTS: "@jobhunter:alerts",
   CV_VAULT: "@jobhunter:cv_vault",
   USER_PROFILE: "@jobhunter:user_profile",
+  FOLLOW_UP_THRESHOLD: "@jobhunter:follow_up_threshold",
 };
 
 function generateId(): string {
@@ -261,6 +262,40 @@ export const db = {
     };
   },
 
+  // ============ FOLLOW-UP REMINDERS ============
+  async getFollowUpThreshold(): Promise<number> {
+    try {
+      const val = await AsyncStorage.getItem(KEYS.FOLLOW_UP_THRESHOLD);
+      return val ? parseInt(val, 10) : 7;
+    } catch {
+      return 7;
+    }
+  },
+
+  async setFollowUpThreshold(days: number): Promise<void> {
+    await AsyncStorage.setItem(KEYS.FOLLOW_UP_THRESHOLD, String(days));
+  },
+
+  async getFollowUpCandidates(thresholdDays?: number): Promise<FollowUpCandidate[]> {
+    const threshold = thresholdDays ?? (await this.getFollowUpThreshold());
+    const apps = await this.getApplications();
+    const now = Date.now();
+
+    const candidates: FollowUpCandidate[] = [];
+    for (const app of apps) {
+      if (app.status !== "applied" && app.status !== "waiting") continue;
+      const daysSince = Math.floor((now - new Date(app.date_applied).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSince < threshold) continue;
+      let urgency: "critical" | "due" | "upcoming";
+      if (daysSince >= threshold * 3) urgency = "critical";
+      else if (daysSince >= threshold * 1.5) urgency = "due";
+      else urgency = "upcoming";
+      candidates.push({ app, daysSinceApplied: daysSince, urgency });
+    }
+
+    return candidates.sort((a, b) => b.daysSinceApplied - a.daysSinceApplied);
+  },
+
   async clearAll(): Promise<void> {
     await AsyncStorage.multiRemove([KEYS.APPLICATIONS, KEYS.ALERTS, KEYS.CV_VAULT, KEYS.USER_PROFILE]);
   },
@@ -356,6 +391,12 @@ export interface AppStats {
   rolePerformance: Record<string, { applied: number; interviews: number }>;
   dailyCounts: Record<string, number>;
   sourceBreakdown: Record<string, number>;
+}
+
+export interface FollowUpCandidate {
+  app: JobApplication;
+  daysSinceApplied: number;
+  urgency: "critical" | "due" | "upcoming";
 }
 
 export interface UserProfile {
