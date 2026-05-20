@@ -12,6 +12,7 @@ import { notificationService } from "@/src/services/notifications";
 import { useColors } from "@/hooks/useColors";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
 import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
+import { aiService as docsService } from "@/src/services/claude";
 import { urlParser } from "@/src/services/urlParser";
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
@@ -55,6 +56,8 @@ export default function AddApplicationScreen() {
   const [autoFilling, setAutoFilling] = useState(false);
   const [autoFillStep, setAutoFillStep] = useState("");
   const [autoFillError, setAutoFillError] = useState("");
+  const [autoFillStage, setAutoFillStage] = useState<0 | 1 | 2 | 3 | 4>(0);
+  // 0=idle 1=fetching 2=filling fields 3=generating docs 4=done
 
   useEffect(() => {
     if (id) {
@@ -169,27 +172,35 @@ export default function AddApplicationScreen() {
 
     setAutoFilling(true);
     setAutoFillError("");
+    setAutoFillStage(1);
     setGeminiStatusCallback((msg) => setAutoFillStep(msg));
 
     try {
       let jobText = input;
+      let resolvedUrl = autoFillMode === "url" ? input : "";
 
+      // ── Stage 1: Fetch page if URL ──
       if (autoFillMode === "url") {
         setAutoFillStep("Fetching job page...");
         const parsed = await urlParser.parseFromUrl(input);
         jobText = parsed.rawText || input;
-        if (parsed.sourceUrl) {
-          setJobUrl(parsed.sourceUrl);
-        }
+        resolvedUrl = parsed.sourceUrl || input;
       }
 
-      setAutoFillStep("Extracting details with AI...");
+      // ── Stage 2: Extract & fill form fields ──
+      setAutoFillStage(2);
+      setAutoFillStep("Extracting job details...");
       const filled = await aiService.autoFillApplication(jobText);
+
+      const filledCompany = filled.company || company;
+      const filledRole = filled.role || role;
+      const filledJobDesc = filled.jobDescription || jobText.slice(0, 1000);
 
       if (filled.company) setCompany(filled.company);
       if (filled.role) setRole(filled.role);
       if (filled.deadline) setDeadline(filled.deadline);
       if (filled.contactEmail) setContactEmail(filled.contactEmail);
+      if (resolvedUrl) setJobUrl(resolvedUrl);
 
       const notesParts: string[] = [];
       if (filled.location) notesParts.push(`Location: ${filled.location}`);
@@ -198,24 +209,35 @@ export default function AddApplicationScreen() {
       if (filled.notes) notesParts.push(`\nNotes: ${filled.notes}`);
       if (notesParts.length > 0) setNotes(notesParts.join("\n"));
 
-      if (autoFillMode === "url") setJobUrl(input);
+      // ── Stage 3: Generate documents ──
+      setAutoFillStage(3);
+      setAutoFillStep("Writing cover letter...");
+      const [generatedCover, generatedEmail] = await Promise.allSettled([
+        docsService.generateCoverLetter(filledRole, filledCompany, filledJobDesc),
+        docsService.generateApplicationEmail(filledRole, filledCompany, filledJobDesc),
+      ]);
 
-      setAutoFillVisible(false);
-      setAutoFillInput("");
+      if (generatedCover.status === "fulfilled") setCoverLetter(generatedCover.value);
+      if (generatedEmail.status === "fulfilled") setApplicationEmail(generatedEmail.value);
 
-      const fieldsSet = [filled.company, filled.role, filled.deadline, filled.contactEmail].filter(Boolean).length;
-      Alert.alert(
-        "Auto-fill complete",
-        `${fieldsSet} fields filled in from the job posting. Review and save when ready.`,
-        [{ text: "Great!" }]
-      );
+      // ── Stage 4: Done ──
+      setAutoFillStage(4);
+      setAutoFillStep("");
     } catch (err: any) {
       setAutoFillError(err.message || "Could not extract job details. Try pasting the text instead.");
+      setAutoFillStage(0);
     } finally {
       setGeminiStatusCallback(null);
       setAutoFilling(false);
-      setAutoFillStep("");
     }
+  };
+
+  const closeAutoFillDone = () => {
+    setAutoFillVisible(false);
+    setAutoFillInput("");
+    setAutoFillStage(0);
+    setAutoFillStep("");
+    setTab("documents");
   };
 
   const shareDoc = async (content: string, label: string) => {
