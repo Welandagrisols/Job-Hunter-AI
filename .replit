@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11"]
+modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
@@ -24,17 +24,18 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/job-hunter-ai run dev"
-waitForPort = 21280
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "pnpm --filter @workspace/api-server run dev"
+waitForPort = 3000
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
+integrations = ["javascript_anthropic_ai_integrations:2.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
@@ -64,5 +65,14 @@ externalPort = 3000
 localPort = 21281
 externalPort = 3002
 
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+PORT = "3000"
