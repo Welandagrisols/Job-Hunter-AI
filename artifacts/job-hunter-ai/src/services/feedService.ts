@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const FEED_CACHE_KEY = "jh_job_feed";
 const SEEN_JOBS_KEY = "jh_seen_jobs";
 const LAST_FETCH_KEY = "jh_last_fetch";
+const SOURCES_KEY = "@jobhunter:feed_sources";
 
 const WESLEY_KEYWORDS = [
   "agronomist", "agronomy", "soil", "fertilizer", "fertiliser",
@@ -19,7 +20,7 @@ const WESLEY_KEYWORDS = [
   "southern africa", "west africa", "africa",
 ];
 
-export const JOB_SOURCES: JobSource[] = [
+export const DEFAULT_JOB_SOURCES: JobSource[] = [
   {
     id: "brightermonday",
     name: "BrighterMonday Kenya",
@@ -29,6 +30,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.brightermonday.co.ke/jobs/rss",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "myjobmag",
@@ -39,6 +41,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.myjobmag.co.ke/feed",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "fuzu",
@@ -49,6 +52,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.fuzu.com/kenya/jobs/feed",
     category: "East Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "reliefweb",
@@ -59,6 +63,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=agronomist",
     category: "NGO/International",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "ngojobs",
@@ -69,6 +74,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://ngojobskenya.com/feed/",
     category: "NGO/International",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "jobwebkenya",
@@ -79,6 +85,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://jobwebkenya.com/feed/",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "devex",
@@ -89,6 +96,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.devex.com/jobs/rss?q=agriculture+east+africa",
     category: "Development",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "indeed_ke",
@@ -99,6 +107,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://ke.indeed.com/rss?q=agriculture&l=Kenya",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "careerpointkenya",
@@ -109,6 +118,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://careerpointkenya.co.ke/feed/",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "unjobs_agri",
@@ -119,6 +129,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://unjobs.org/themes/food-security.rss",
     category: "NGO/International",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "kazikwanza",
@@ -129,6 +140,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://kazikwanza.co.ke/feed/",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "ilri",
@@ -139,6 +151,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.ilri.org/jobs/rss",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "jobsinkenya",
@@ -149,6 +162,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.jobsinkenya.co.ke/feed/",
     category: "Kenya",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "icipe",
@@ -159,6 +173,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.icipe.org/feed/",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "ifdc",
@@ -169,6 +184,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=ifdc+africa",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "agra",
@@ -179,6 +195,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=agra+agriculture+africa",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "biovision",
@@ -189,6 +206,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=biovision+kenya",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "fao",
@@ -199,6 +217,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=fao+agriculture+east+africa",
     category: "NGO/International",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "unep",
@@ -209,6 +228,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://reliefweb.int/jobs/rss.xml?search=unep+environment+nairobi",
     category: "NGO/International",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "ocp",
@@ -219,6 +239,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.devex.com/jobs/rss?q=ocp+africa",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "cgiar",
@@ -229,6 +250,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.devex.com/jobs/rss?q=cgiar+east+africa",
     category: "Agriculture/Research",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "brightermonday_ug",
@@ -239,6 +261,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.brightermonday.co.ug/jobs/rss",
     category: "East Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "brightermonday_tz",
@@ -249,6 +272,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.brightermonday.co.tz/jobs/rss",
     category: "East Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "ethiojobs",
@@ -259,6 +283,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.ethiojobs.net/rss/agriculture/",
     category: "East Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "myjobmag_ug",
@@ -269,6 +294,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.myjobmag.co.ug/feed",
     category: "East Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "jobnetafrica",
@@ -279,6 +305,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.jobnetafrica.com/feed/",
     category: "Southern Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "go3zambia",
@@ -289,6 +316,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://jobs.go3.co.zm/feed/",
     category: "Southern Africa",
     enabled: true,
+    isDefault: true,
   },
   {
     id: "jobsmw",
@@ -299,6 +327,7 @@ export const JOB_SOURCES: JobSource[] = [
     rssUrlGeneral: "https://www.jobsmw.com/feed/",
     category: "Southern Africa",
     enabled: true,
+    isDefault: true,
   },
 ];
 
@@ -339,7 +368,6 @@ function parseRSSItems(xmlText: string, sourceName: string): RawJob[] {
       const title = getTag("title");
       const link = getTag("link") || getTag("guid");
 
-      // Try richer content sources in priority order
       const rawDesc =
         getTag("content:encoded") ||
         getTag("description") ||
@@ -389,7 +417,6 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
   const urls = [source.rssUrl, source.rssUrlGeneral].filter((u, i, a) => u && a.indexOf(u) === i) as string[];
 
   for (const rssUrl of urls) {
-    // 1. Try direct fetch first — works in native APK without any proxy
     try {
       const r = await fetchWithTimeout(rssUrl, {
         headers: { Accept: "application/rss+xml, application/xml, text/xml" },
@@ -403,7 +430,6 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
       }
     } catch {}
 
-    // 2. Fall back to rss2json proxy (web / Expo Go)
     try {
       const r = await fetchWithTimeout(`${PROXY2}${encodeURIComponent(rssUrl)}`);
       if (r.ok) {
@@ -414,7 +440,6 @@ async function fetchRSS(source: JobSource): Promise<RawJob[]> {
       }
     } catch {}
 
-    // 3. Last resort: allorigins proxy
     try {
       const r = await fetchWithTimeout(`${PROXY}${encodeURIComponent(rssUrl)}`);
       if (r.ok) {
@@ -464,17 +489,73 @@ async function scoreRelevance(jobs: RawJob[]): Promise<RawJob[]> {
           }
         });
       }
-    } catch {
-      // Use keyword scores if AI fails
-    }
+    } catch {}
   }
 
   return [...highScore, ...needsAI, ...lowScore].sort((a, b) => b.relevanceScore - a.relevanceScore);
 }
 
 export const feedService = {
+  // ── SOURCE MANAGEMENT ──────────────────────────────────────────────────────
+
+  async getSources(): Promise<JobSource[]> {
+    try {
+      const raw = await AsyncStorage.getItem(SOURCES_KEY);
+      if (raw) {
+        const stored: JobSource[] = JSON.parse(raw);
+        // Merge: add any new default sources that aren't in storage yet
+        const storedIds = new Set(stored.map((s) => s.id));
+        const newDefaults = DEFAULT_JOB_SOURCES.filter((s) => !storedIds.has(s.id));
+        if (newDefaults.length > 0) {
+          const merged = [...stored, ...newDefaults];
+          await AsyncStorage.setItem(SOURCES_KEY, JSON.stringify(merged));
+          return merged;
+        }
+        return stored;
+      }
+      // First run — seed with defaults
+      await AsyncStorage.setItem(SOURCES_KEY, JSON.stringify(DEFAULT_JOB_SOURCES));
+      return DEFAULT_JOB_SOURCES;
+    } catch {
+      return DEFAULT_JOB_SOURCES;
+    }
+  },
+
+  async saveSources(sources: JobSource[]): Promise<void> {
+    await AsyncStorage.setItem(SOURCES_KEY, JSON.stringify(sources));
+  },
+
+  async toggleSource(id: string, enabled: boolean): Promise<void> {
+    const sources = await this.getSources();
+    const updated = sources.map((s) => s.id === id ? { ...s, enabled } : s);
+    await this.saveSources(updated);
+  },
+
+  async addSource(source: Omit<JobSource, "id" | "isDefault">): Promise<JobSource> {
+    const sources = await this.getSources();
+    const newSource: JobSource = {
+      ...source,
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      isDefault: false,
+    };
+    await this.saveSources([...sources, newSource]);
+    return newSource;
+  },
+
+  async deleteSource(id: string): Promise<void> {
+    const sources = await this.getSources();
+    await this.saveSources(sources.filter((s) => s.id !== id));
+  },
+
+  async resetToDefaults(): Promise<void> {
+    await AsyncStorage.setItem(SOURCES_KEY, JSON.stringify(DEFAULT_JOB_SOURCES));
+  },
+
+  // ── FEED FETCHING ──────────────────────────────────────────────────────────
+
   async fetchAllFeeds(onProgress?: (source: string, count: number) => void): Promise<FeedJob[]> {
-    const enabledSources = JOB_SOURCES.filter((s) => s.enabled);
+    const allSources = await this.getSources();
+    const enabledSources = allSources.filter((s) => s.enabled);
     const seenIds = await this.getSeenJobIds();
     const allJobs: RawJob[] = [];
 
@@ -503,14 +584,12 @@ export const feedService = {
       }
     });
 
-    // Deduplicate: first by exact URL, then by normalised title (same job from multiple boards)
     const seenUrls = new Set<string>();
     const seenTitles = new Set<string>();
     const unique = allJobs.filter((job) => {
       if (seenUrls.has(job.url)) return false;
       seenUrls.add(job.url);
       const t = normalizeTitle(job.title);
-      // Only title-dedup when title is long enough to be specific (>20 chars)
       if (t.length > 20 && seenTitles.has(t)) return false;
       if (t.length > 20) seenTitles.add(t);
       return true;
@@ -524,7 +603,7 @@ export const feedService = {
     const scored = await scoreRelevance(withNewFlag);
 
     const feedJobs: FeedJob[] = scored.map((job) => {
-      const source = JOB_SOURCES.find((s) => s.name === job.source);
+      const source = allSources.find((s) => s.name === job.source);
       return {
         ...job,
         sourceColor: source?.color || "#666",
@@ -533,7 +612,6 @@ export const feedService = {
       };
     });
 
-    // Only overwrite the cache if we got real results — never wipe old jobs with an empty fetch
     if (feedJobs.length > 0) {
       await AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(feedJobs));
       await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
@@ -589,6 +667,7 @@ export interface JobSource {
   rssUrlGeneral?: string;
   category: string;
   enabled: boolean;
+  isDefault?: boolean;
 }
 
 export interface RawJob {
@@ -608,3 +687,6 @@ export interface FeedJob extends RawJob {
   sourceIcon: string;
   sourceCategory: string;
 }
+
+// Keep backward-compat export for any legacy references
+export const JOB_SOURCES = DEFAULT_JOB_SOURCES;

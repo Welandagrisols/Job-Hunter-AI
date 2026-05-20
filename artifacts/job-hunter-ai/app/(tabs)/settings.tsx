@@ -470,6 +470,25 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      {/* Job Feed */}
+      <SectionLabel title="Job Feed" colors={colors} />
+      <Card colors={colors}>
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}
+          onPress={() => router.push("/source-manager")}
+          activeOpacity={0.7}
+        >
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary + "22", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="list-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 15 }}>Feed Sources</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>Manage job boards & RSS feeds — add, remove, toggle</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      </Card>
+
       {/* Data */}
       <SectionLabel title="Data" colors={colors} />
       <Card colors={colors}>

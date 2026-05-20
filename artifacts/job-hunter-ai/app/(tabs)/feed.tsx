@@ -7,7 +7,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { feedService, FeedJob, JOB_SOURCES } from "@/src/services/feedService";
+import { feedService, FeedJob, JobSource } from "@/src/services/feedService";
 import { theme } from "@/src/theme";
 import { formatDistanceToNow } from "date-fns";
 
@@ -16,6 +16,7 @@ const FILTERS = ["All", "High Match", "Kenya", "NGO/International", "East Africa
 export default function FeedScreen() {
   const router = useRouter();
   const [jobs, setJobs] = useState<FeedJob[]>([]);
+  const [sources, setSources] = useState<JobSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
@@ -25,8 +26,12 @@ export default function FeedScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const loadCached = async () => {
-    const cached = await feedService.getCachedFeed();
-    const last = await feedService.getLastFetchTime();
+    const [cached, last, allSources] = await Promise.all([
+      feedService.getCachedFeed(),
+      feedService.getLastFetchTime(),
+      feedService.getSources(),
+    ]);
+    setSources(allSources);
     if (cached.length > 0) {
       setJobs(cached);
       setLastFetch(last);
@@ -121,7 +126,7 @@ export default function FeedScreen() {
           <Text style={styles.loadingSource}>📡 {loadingSource}</Text>
         ) : null}
         <View style={styles.sourcesList}>
-          {JOB_SOURCES.filter((s) => s.enabled).map((s) => (
+          {sources.filter((s) => s.enabled).map((s) => (
             <View key={s.id} style={styles.sourceProgress}>
               <Text style={styles.sourceIcon}>{s.icon}</Text>
               <Text style={styles.sourceName}>{s.name}</Text>
@@ -177,7 +182,7 @@ export default function FeedScreen() {
         </View>
         <View style={[styles.statChip, { borderColor: theme.colors.accent.cyan + "44" }]}>
           <Text style={[styles.statNum, { color: theme.colors.accent.cyan }]}>
-            {JOB_SOURCES.filter((s) => s.enabled).length}
+            {sources.filter((s) => s.enabled).length}
           </Text>
           <Text style={styles.statLabel}>Sources</Text>
         </View>
