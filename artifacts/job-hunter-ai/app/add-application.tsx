@@ -255,6 +255,16 @@ export default function AddApplicationScreen() {
     });
   };
 
+  const sendViaEmail = (body: string) => {
+    const to = encodeURIComponent(contactEmail.trim());
+    const subject = encodeURIComponent(`Application for ${role}${company ? ` at ${company}` : ""}`);
+    const encodedBody = encodeURIComponent(body);
+    const url = `mailto:${to}?subject=${subject}&body=${encodedBody}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("No email app found", "Please install an email app and try again.");
+    });
+  };
+
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
@@ -423,6 +433,37 @@ export default function AddApplicationScreen() {
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: bottomPad + 40, paddingTop: 8 }}>
+          {/* Send via Email banner — shown when application email + contact are both ready */}
+          {applicationEmail && contactEmail ? (
+            <TouchableOpacity
+              onPress={() => sendViaEmail(applicationEmail)}
+              activeOpacity={0.8}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 12,
+                backgroundColor: colors.primary + "18",
+                borderRadius: 14, padding: 14,
+                borderWidth: 1, borderColor: colors.primary + "55",
+              }}
+            >
+              <View style={{
+                width: 38, height: 38, borderRadius: 10,
+                backgroundColor: colors.primary + "25",
+                alignItems: "center", justifyContent: "center",
+              }}>
+                <Ionicons name="send" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>
+                  Send via Email
+                </Text>
+                <Text style={{ color: colors.primary, fontSize: 12, marginTop: 1, opacity: 0.75 }} numberOfLines={1}>
+                  To: {contactEmail}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          ) : null}
+
           {savedDocCount === 0 ? (
             <View style={{ alignItems: "center", paddingTop: 60, gap: 12 }}>
               <Ionicons name="document-text-outline" size={48} color={colors.textMuted} />
@@ -440,6 +481,7 @@ export default function AddApplicationScreen() {
                 colors={colors}
                 onShare={() => shareDoc(doc.value, AI_DOC_LABELS[doc.key])}
                 onWhatsApp={() => shareToWhatsApp(doc.value, AI_DOC_LABELS[doc.key])}
+                onEmail={doc.key === "application_email" && contactEmail ? () => sendViaEmail(doc.value) : undefined}
                 onEdit={(v) => doc.set(v)}
                 onSave={id ? async () => {
                   await db.saveAiDocument(id, doc.key as any, doc.value);
@@ -714,7 +756,7 @@ export default function AddApplicationScreen() {
   );
 }
 
-function AiDocCard({ label, content, colors, onShare, onWhatsApp, onEdit, onSave }: any) {
+function AiDocCard({ label, content, colors, onShare, onWhatsApp, onEmail, onEdit, onSave }: any) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(content);
@@ -767,6 +809,9 @@ function AiDocCard({ label, content, colors, onShare, onWhatsApp, onEdit, onSave
                   Clipboard.setString(content);
                   Alert.alert("Copied!", `${label} copied to clipboard.`);
                 }} />
+                {onEmail && (
+                  <ActionBtn icon="send-outline" label="Email" color={colors.primary} onPress={onEmail} />
+                )}
                 <ActionBtn icon="share-outline" label="Share" color={colors.primary} onPress={onShare} />
                 <ActionBtn icon="logo-whatsapp" label="WhatsApp" color="#25D366" onPress={onWhatsApp} />
               </>
