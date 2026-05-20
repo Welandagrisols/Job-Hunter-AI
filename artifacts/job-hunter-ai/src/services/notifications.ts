@@ -113,24 +113,41 @@ export const notificationService = {
       const deadline = new Date(deadlineStr);
       if (isNaN(deadline.getTime())) return;
 
-      const reminderDate = new Date(deadline);
-      reminderDate.setDate(reminderDate.getDate() - 3);
-      reminderDate.setHours(9, 0, 0, 0);
-
-      if (reminderDate <= new Date()) return;
-
       const hasPermission = await this.requestPermissions();
       if (!hasPermission) return;
 
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "⚠️ Application Deadline in 3 Days",
-          body: `${role} at ${company} closes on ${deadline.toLocaleDateString()}`,
-          sound: "default",
-          data: { type: "deadline_reminder", company, role },
-        },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: reminderDate },
-      });
+      const now = new Date();
+
+      // 48-hour reminder
+      const reminder48h = new Date(deadline);
+      reminder48h.setHours(reminder48h.getHours() - 48);
+      if (reminder48h > now) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "⏳ Deadline in 48 Hours",
+            body: `${role} at ${company} closes on ${deadline.toLocaleDateString()}. Have you applied?`,
+            sound: "default",
+            data: { type: "deadline_reminder_48h", company, role },
+          },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: reminder48h },
+        });
+      }
+
+      // 7-day reminder (early heads-up)
+      const reminder7d = new Date(deadline);
+      reminder7d.setDate(reminder7d.getDate() - 7);
+      reminder7d.setHours(9, 0, 0, 0);
+      if (reminder7d > now) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "📅 Deadline in 1 Week",
+            body: `${role} at ${company} closes in 7 days. Get your application ready.`,
+            sound: "default",
+            data: { type: "deadline_reminder_7d", company, role },
+          },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: reminder7d },
+        });
+      }
     } catch (err) {
       console.warn("Deadline reminder failed:", err);
     }

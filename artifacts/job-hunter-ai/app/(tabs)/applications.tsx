@@ -11,6 +11,23 @@ import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
 
+function getDeadlineInfo(deadlineStr: string, colors: ReturnType<typeof import("@/hooks/useColors").useColors>) {
+  const deadline = new Date(deadlineStr);
+  if (isNaN(deadline.getTime())) return null;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  deadline.setHours(0, 0, 0, 0);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / msPerDay);
+
+  if (daysLeft < 0) return { label: "Overdue", color: colors.destructive, icon: "alert-circle" as const };
+  if (daysLeft === 0) return { label: "Due today!", color: colors.destructive, icon: "alert-circle" as const };
+  if (daysLeft === 1) return { label: "1 day left", color: colors.destructive, icon: "time-outline" as const };
+  if (daysLeft <= 3) return { label: `${daysLeft} days left`, color: colors.orange, icon: "time-outline" as const };
+  if (daysLeft <= 7) return { label: `${daysLeft} days left`, color: colors.orange, icon: "calendar-outline" as const };
+  return { label: `${daysLeft} days left`, color: colors.green, icon: "calendar-outline" as const };
+}
+
 const STATUS_FILTERS = ["all", "applied", "interview", "offer", "rejected", "waiting", "withdrawn"];
 
 export default function ApplicationsScreen() {
@@ -204,15 +221,25 @@ export default function ApplicationsScreen() {
                   </View>
                 </View>
                 <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4 }}>{item.role}</Text>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
                   <Text style={{ color: colors.textMuted, fontSize: 11 }}>
                     Applied {format(new Date(item.date_applied), "MMM d, yyyy")}
                   </Text>
-                  {item.deadline && (
-                    <Text style={{ color: colors.orange, fontSize: 11 }}>
-                      Deadline: {format(new Date(item.deadline), "MMM d")}
-                    </Text>
-                  )}
+                  {item.deadline && (() => {
+                    const dl = getDeadlineInfo(item.deadline, colors);
+                    if (!dl) return null;
+                    return (
+                      <View style={{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999,
+                        backgroundColor: dl.color + "20",
+                        borderWidth: 1, borderColor: dl.color + "50",
+                      }}>
+                        <Ionicons name={dl.icon} size={10} color={dl.color} />
+                        <Text style={{ color: dl.color, fontSize: 10, fontWeight: "700" }}>{dl.label}</Text>
+                      </View>
+                    );
+                  })()}
                 </View>
                 {item.location && (
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>📍 {item.location}</Text>

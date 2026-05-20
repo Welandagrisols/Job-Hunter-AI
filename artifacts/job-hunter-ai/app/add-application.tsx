@@ -143,10 +143,16 @@ export default function AddApplicationScreen() {
         if (interviewDate && interviewDate !== prev?.interview_date) {
           await scheduleInterviewReminder(interviewDate, company.trim(), role.trim());
         }
+        if (deadline.trim() && deadline.trim() !== prev?.deadline) {
+          await notificationService.scheduleDeadlineReminder(company.trim(), role.trim(), deadline.trim()).catch(() => {});
+        }
       } else {
         await db.addApplication({ ...payload, date_applied: new Date().toISOString() } as any);
         if (interviewDate) {
           await scheduleInterviewReminder(interviewDate, company.trim(), role.trim());
+        }
+        if (deadline.trim()) {
+          await notificationService.scheduleDeadlineReminder(company.trim(), role.trim(), deadline.trim()).catch(() => {});
         }
       }
       router.back();
