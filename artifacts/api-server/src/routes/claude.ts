@@ -3,9 +3,11 @@ import { Router } from "express";
 const claudeRouter = Router();
 
 claudeRouter.post("/claude", async (req, res) => {
-  const apiKey = process.env["ANTHROPIC_API_KEY"];
+  const apiKey = process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"] || process.env["ANTHROPIC_API_KEY"];
+  const baseURL = process.env["AI_INTEGRATIONS_ANTHROPIC_BASE_URL"] || "https://api.anthropic.com";
+
   if (!apiKey) {
-    res.status(503).json({ error: "AI service not configured. Add ANTHROPIC_API_KEY to Replit Secrets." });
+    res.status(503).json({ error: "AI service not configured." });
     return;
   }
 
@@ -17,7 +19,7 @@ claudeRouter.post("/claude", async (req, res) => {
   }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(`${baseURL}/v1/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -25,7 +27,7 @@ claudeRouter.post("/claude", async (req, res) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: model || "claude-sonnet-4-20250514",
+        model: model || "claude-sonnet-4-6",
         max_tokens: max_tokens || 1500,
         system: system || undefined,
         messages,
