@@ -31,7 +31,7 @@ export default function AddApplicationScreen() {
   const { id, focus } = useLocalSearchParams<{ id?: string; focus?: string }>();
   const interviewDateRef = useRef<TextInput>(null);
 
-  const [tab, setTab] = useState<"details" | "documents">("details");
+  const [tab, setTab] = useState<"details" | "documents" | "prep">("details");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -48,6 +48,7 @@ export default function AddApplicationScreen() {
   const [applicationEmail, setApplicationEmail] = useState("");
   const [interviewPrep, setInterviewPrep] = useState("");
   const [cvTailoring, setCvTailoring] = useState("");
+  const [generatingPrep, setGeneratingPrep] = useState(false);
 
   // Auto-fill modal state
   const [autoFillVisible, setAutoFillVisible] = useState(false);
@@ -80,9 +81,8 @@ export default function AddApplicationScreen() {
             setTab("details");
             setTimeout(() => interviewDateRef.current?.focus(), 400);
           }
-          if (focus === "documents") {
-            setTab("documents");
-          }
+          if (focus === "documents") setTab("documents");
+          if (focus === "prep") setTab("prep");
         }
         setLoading(false);
       });
@@ -261,6 +261,26 @@ export default function AddApplicationScreen() {
     });
   };
 
+  const generatePrep = async () => {
+    if (!role.trim()) {
+      Alert.alert("Role required", "Please fill in the job role on the Details tab first.");
+      return;
+    }
+    setGeneratingPrep(true);
+    try {
+      const jobDesc = notes || role;
+      const prep = await docsService.generateInterviewPrep(role, company, jobDesc);
+      setInterviewPrep(prep);
+      if (id) {
+        await db.saveAiDocument(id, "interview_prep", prep);
+      }
+    } catch (err: any) {
+      Alert.alert("Generation failed", err.message || "Please try again.");
+    } finally {
+      setGeneratingPrep(false);
+    }
+  };
+
   const sendViaEmail = (body: string) => {
     const to = encodeURIComponent(contactEmail.trim());
     const subject = encodeURIComponent(`Application for ${role}${company ? ` at ${company}` : ""}`);
@@ -344,19 +364,31 @@ export default function AddApplicationScreen() {
           style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center", backgroundColor: tab === "details" ? colors.primary : "transparent" }}
           onPress={() => setTab("details")}
         >
-          <Text style={{ color: tab === "details" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 13 }}>Details</Text>
+          <Text style={{ color: tab === "details" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 12 }}>Details</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center", backgroundColor: tab === "documents" ? colors.primary : "transparent" }}
           onPress={() => setTab("documents")}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 13 }}>AI Documents</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 12 }}>Documents</Text>
             {savedDocCount > 0 && (
-              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: tab === "documents" ? colors.primaryForeground + "33" : colors.primary + "22", alignItems: "center", justifyContent: "center" }}>
-                <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.primary, fontSize: 10, fontWeight: "700" }}>{savedDocCount}</Text>
+              <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: tab === "documents" ? colors.primaryForeground + "33" : colors.primary + "22", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ color: tab === "documents" ? colors.primaryForeground : colors.primary, fontSize: 9, fontWeight: "700" }}>{savedDocCount}</Text>
               </View>
             )}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: "center", backgroundColor: tab === "prep" ? colors.statusInterview : "transparent" }}
+          onPress={() => setTab("prep")}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Ionicons name="school-outline" size={12} color={tab === "prep" ? colors.primaryForeground : colors.textSecondary} />
+            <Text style={{ color: tab === "prep" ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 12 }}>Interview</Text>
+            {interviewPrep ? (
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tab === "prep" ? colors.primaryForeground : colors.green }} />
+            ) : null}
           </View>
         </TouchableOpacity>
       </View>
@@ -437,7 +469,7 @@ export default function AddApplicationScreen() {
             }
           </TouchableOpacity>
         </ScrollView>
-      ) : (
+      ) : tab === "documents" ? (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: bottomPad + 40, paddingTop: 8 }}>
           {/* Send via Email banner — shown when application email + contact are both ready */}
           {applicationEmail && contactEmail ? (
@@ -508,6 +540,129 @@ export default function AddApplicationScreen() {
                 : <><Ionicons name="save-outline" size={18} color={colors.primaryForeground} /><Text style={{ color: colors.primaryForeground, fontWeight: "700" }}>Save All Changes</Text></>
               }
             </TouchableOpacity>
+          )}
+        </ScrollView>
+      ) : (
+        /* ── Interview Prep Tab ── */
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, gap: 14, paddingBottom: bottomPad + 40, paddingTop: 8 }}>
+          {generatingPrep ? (
+            /* Generating state */
+            <View style={{ alignItems: "center", paddingVertical: 48, gap: 16 }}>
+              <ActivityIndicator size="large" color={colors.statusInterview} />
+              <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 16 }}>Preparing your interview...</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 13, textAlign: "center" }}>
+                Generating questions, suggested answers and tips tailored to this role
+              </Text>
+            </View>
+          ) : interviewPrep ? (
+            /* Prep content — parsed into sections */
+            <>
+              {/* Header bar */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: colors.statusInterview + "20", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="school" size={16} color={colors.statusInterview} />
+                  </View>
+                  <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 15 }}>Interview Prep</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={generatePrep}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.statusInterview + "18", borderWidth: 1, borderColor: colors.statusInterview + "44" }}
+                >
+                  <Ionicons name="refresh-outline" size={13} color={colors.statusInterview} />
+                  <Text style={{ color: colors.statusInterview, fontSize: 12, fontWeight: "600" }}>Regenerate</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Sections parsed from the AI output */}
+              {parsePrepSections(interviewPrep).map((section) => (
+                <View key={section.title} style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, overflow: "hidden" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: section.accent + "12" }}>
+                    <Ionicons name={section.icon as any} size={15} color={section.accent} />
+                    <Text style={{ color: section.accent, fontWeight: "700", fontSize: 13, flex: 1 }}>{section.title}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const { Clipboard } = require("react-native");
+                        Clipboard.setString(section.content);
+                        Alert.alert("Copied", `${section.title} copied to clipboard.`);
+                      }}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 21, padding: 14 }}>
+                    {section.content}
+                  </Text>
+                </View>
+              ))}
+
+              {/* Copy all + Save */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const { Clipboard } = require("react-native");
+                    Clipboard.setString(interviewPrep);
+                    Alert.alert("Copied", "Full interview prep copied to clipboard.");
+                  }}
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 13, borderRadius: 999, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <Ionicons name="copy-outline" size={15} color={colors.textSecondary} />
+                  <Text style={{ color: colors.textSecondary, fontWeight: "600", fontSize: 13 }}>Copy All</Text>
+                </TouchableOpacity>
+                {id && (
+                  <TouchableOpacity
+                    onPress={async () => {
+                      await db.saveAiDocument(id, "interview_prep", interviewPrep);
+                      Alert.alert("Saved", "Interview prep saved to this application.");
+                    }}
+                    style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 13, borderRadius: 999, backgroundColor: colors.statusInterview + "18", borderWidth: 1, borderColor: colors.statusInterview + "44" }}
+                  >
+                    <Ionicons name="save-outline" size={15} color={colors.statusInterview} />
+                    <Text style={{ color: colors.statusInterview, fontWeight: "600", fontSize: 13 }}>Save</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          ) : (
+            /* Empty / generate state */
+            <>
+              {/* Context card */}
+              <View style={{ backgroundColor: colors.statusInterview + "12", borderRadius: 16, padding: 20, alignItems: "center", gap: 12, borderWidth: 1, borderColor: colors.statusInterview + "30" }}>
+                <View style={{ width: 56, height: 56, borderRadius: 20, backgroundColor: colors.statusInterview + "20", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="school-outline" size={28} color={colors.statusInterview} />
+                </View>
+                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 16 }}>Interview Prep</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center", lineHeight: 20 }}>
+                  AI will generate likely interview questions with suggested answers, technical questions to prepare for, and smart questions to ask the interviewer — all tailored to this specific role.
+                </Text>
+              </View>
+
+              {/* What you'll get */}
+              {[
+                { icon: "chatbubble-ellipses-outline", title: "Likely Questions", sub: "5 common questions with tailored suggested answers", color: colors.statusInterview },
+                { icon: "code-working-outline", title: "Technical Questions", sub: "Role-specific technical or practical questions", color: colors.orange },
+                { icon: "help-circle-outline", title: "Questions to Ask Them", sub: "Smart questions that show genuine interest", color: colors.green },
+              ].map((item) => (
+                <View key={item.title} style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: item.color + "18", alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name={item.icon as any} size={16} color={item.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>{item.title}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>{item.sub}</Text>
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                onPress={generatePrep}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.statusInterview, borderRadius: 999, padding: 16 }}
+              >
+                <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+                <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Generate Interview Prep</Text>
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       )}
@@ -760,6 +915,26 @@ export default function AddApplicationScreen() {
       </Modal>
     </View>
   );
+}
+
+function parsePrepSections(raw: string) {
+  const sectionDefs = [
+    { heading: "LIKELY QUESTIONS", title: "Likely Questions", icon: "chatbubble-ellipses-outline" },
+    { heading: "TECHNICAL QUESTIONS TO PREPARE FOR", title: "Technical Questions", icon: "code-working-outline" },
+    { heading: "QUESTIONS TO ASK THE INTERVIEWER", title: "Questions to Ask Them", icon: "help-circle-outline" },
+  ];
+  const accents = ["#6C8EF5", "#F59E0B", "#10B981"];
+
+  return sectionDefs.map((def, i) => {
+    const headingPattern = new RegExp(`${def.heading}:?\\s*`, "i");
+    const nextHeadings = sectionDefs.slice(i + 1).map((d) => `${d.heading}:?`).join("|");
+    const match = nextHeadings
+      ? raw.match(new RegExp(`${def.heading}:?\\s*([\\s\\S]*?)(?=${nextHeadings}|$)`, "i"))
+      : raw.match(new RegExp(`${def.heading}:?\\s*([\\s\\S]*)$`, "i"));
+
+    const content = match ? match[1].trim() : "";
+    return { title: def.title, icon: def.icon, accent: accents[i], content: content || "Not available." };
+  });
 }
 
 function AiDocCard({ label, content, colors, onShare, onWhatsApp, onEmail, onEdit, onSave }: any) {
