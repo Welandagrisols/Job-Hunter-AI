@@ -211,14 +211,16 @@ export default function AddApplicationScreen() {
 
       // ── Stage 3: Generate documents ──
       setAutoFillStage(3);
-      setAutoFillStep("Writing cover letter...");
-      const [generatedCover, generatedEmail] = await Promise.allSettled([
+      setAutoFillStep("Writing cover letter, email & CV notes...");
+      const [generatedCover, generatedEmail, generatedCV] = await Promise.allSettled([
         docsService.generateCoverLetter(filledRole, filledCompany, filledJobDesc),
         docsService.generateApplicationEmail(filledRole, filledCompany, filledJobDesc),
+        docsService.tailorCVPoints(filledJobDesc),
       ]);
 
       if (generatedCover.status === "fulfilled") setCoverLetter(generatedCover.value);
       if (generatedEmail.status === "fulfilled") setApplicationEmail(generatedEmail.value);
+      if (generatedCV.status === "fulfilled") setCvTailoring(generatedCV.value);
 
       // ── Stage 4: Done ──
       setAutoFillStage(4);
@@ -467,7 +469,7 @@ export default function AddApplicationScreen() {
         visible={autoFillVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setAutoFillVisible(false)}
+        onRequestClose={() => !autoFilling && setAutoFillVisible(false)}
       >
         <KeyboardAvoidingView
           style={{ flex: 1, backgroundColor: colors.background }}
@@ -479,165 +481,230 @@ export default function AddApplicationScreen() {
             paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
             borderBottomWidth: 1, borderBottomColor: colors.border,
           }}>
-            <TouchableOpacity onPress={() => { setAutoFillVisible(false); setAutoFillInput(""); setAutoFillError(""); }} style={{ padding: 4 }}>
-              <Ionicons name="close" size={24} color={colors.foreground} />
+            <TouchableOpacity
+              onPress={() => { if (!autoFilling) { setAutoFillVisible(false); setAutoFillInput(""); setAutoFillError(""); setAutoFillStage(0); } }}
+              style={{ padding: 4 }}
+              disabled={autoFilling}
+            >
+              <Ionicons name="close" size={24} color={autoFilling ? colors.textMuted : colors.foreground} />
             </TouchableOpacity>
             <View style={{ alignItems: "center" }}>
-              <Text style={{ fontSize: 17, fontWeight: "700", color: colors.foreground }}>Auto-Fill</Text>
-              <Text style={{ fontSize: 12, color: colors.primary, marginTop: 1 }}>AI-powered form filling</Text>
+              <Text style={{ fontSize: 17, fontWeight: "700", color: colors.foreground }}>
+                {autoFillStage === 4 ? "Application Ready" : "Apply from Job Posting"}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.primary, marginTop: 1 }}>
+                {autoFillStage === 4 ? "Review, edit and save" : "AI fills form + writes all documents"}
+              </Text>
             </View>
             <View style={{ width: 32 }} />
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16 }}>
 
-            {/* Mode toggle */}
-            <View style={{ flexDirection: "row", backgroundColor: colors.card, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border }}>
-              {(["url", "text"] as const).map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  style={{
-                    flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center",
-                    backgroundColor: autoFillMode === m ? colors.primary : "transparent",
-                  }}
-                  onPress={() => { setAutoFillMode(m); setAutoFillInput(""); setAutoFillError(""); }}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons
-                      name={m === "url" ? "link-outline" : "document-text-outline"}
-                      size={14}
-                      color={autoFillMode === m ? colors.primaryForeground : colors.textSecondary}
-                    />
-                    <Text style={{
-                      color: autoFillMode === m ? colors.primaryForeground : colors.textSecondary,
-                      fontWeight: "600", fontSize: 13,
-                    }}>
-                      {m === "url" ? "Job URL" : "Paste Text"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* How it works hint */}
-            <View style={{
-              flexDirection: "row", alignItems: "flex-start", gap: 10,
-              backgroundColor: colors.primary + "12", borderRadius: 12,
-              padding: 12, borderWidth: 1, borderColor: colors.primary + "30",
-            }}>
-              <Ionicons name="information-circle-outline" size={18} color={colors.primary} style={{ marginTop: 1 }} />
-              <Text style={{ color: colors.primary, fontSize: 13, flex: 1, lineHeight: 19, opacity: 0.9 }}>
-                {autoFillMode === "url"
-                  ? "Paste a job post URL (BrighterMonday, LinkedIn, MyJobMag, etc.) and AI will fetch and extract all details."
-                  : "Paste the full job description text. AI will extract company, role, deadline, contact email, requirements and more."}
-              </Text>
-            </View>
-
-            {/* Input */}
-            {autoFillMode === "url" ? (
-              <View style={{ gap: 6 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Post URL</Text>
-                <TextInput
-                  style={inputStyle(colors)}
-                  placeholder="https://www.brightermonday.co.ke/jobs/..."
-                  placeholderTextColor={colors.textMuted}
-                  value={autoFillInput}
-                  onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
-                  keyboardType="url"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            ) : (
-              <View style={{ gap: 6 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Description</Text>
-                <TextInput
-                  style={[inputStyle(colors), { minHeight: 200, textAlignVertical: "top" }]}
-                  placeholder={"Paste the full job advert here...\n\nInclude title, responsibilities, requirements, deadline and any contact details."}
-                  placeholderTextColor={colors.textMuted}
-                  value={autoFillInput}
-                  onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
-                  multiline
-                  numberOfLines={10}
-                  textAlignVertical="top"
-                />
-              </View>
-            )}
-
-            {/* Error */}
-            {autoFillError ? (
-              <View style={{
-                flexDirection: "row", alignItems: "flex-start", gap: 10,
-                backgroundColor: colors.destructive + "18", borderRadius: 12,
-                padding: 12, borderWidth: 1, borderColor: colors.destructive + "44",
-              }}>
-                <Ionicons name="alert-circle-outline" size={18} color={colors.destructive} style={{ marginTop: 1 }} />
-                <Text style={{ color: colors.destructive, fontSize: 13, flex: 1, lineHeight: 19 }}>{autoFillError}</Text>
-              </View>
-            ) : null}
-
-            {/* Status during processing */}
-            {autoFilling && autoFillStep ? (
-              <View style={{
-                flexDirection: "row", alignItems: "center", gap: 10,
-                backgroundColor: colors.primary + "12", borderRadius: 12, padding: 12,
-              }}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={{ color: colors.primary, fontSize: 13 }}>{autoFillStep}</Text>
-              </View>
-            ) : null}
-
-            {/* What gets filled */}
-            <View style={{
-              backgroundColor: colors.card, borderRadius: 14,
-              padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10,
-            }}>
-              <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 13, marginBottom: 2 }}>
-                Fields that will be filled:
-              </Text>
-              {[
-                { icon: "business-outline", label: "Company name" },
-                { icon: "briefcase-outline", label: "Job title / role" },
-                { icon: "calendar-outline", label: "Application deadline" },
-                { icon: "mail-outline", label: "Contact email" },
-                { icon: "location-outline", label: "Location & salary (in notes)" },
-                { icon: "list-outline", label: "Role summary & requirements (in notes)" },
-              ].map((item) => (
-                <View key={item.label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {/* ── DONE STATE ── */}
+            {autoFillStage === 4 ? (
+              <>
+                <View style={{
+                  backgroundColor: colors.green + "15", borderRadius: 16,
+                  padding: 20, alignItems: "center", gap: 12,
+                  borderWidth: 1, borderColor: colors.green + "40",
+                }}>
                   <View style={{
-                    width: 28, height: 28, borderRadius: 8,
-                    backgroundColor: colors.primary + "18",
+                    width: 56, height: 56, borderRadius: 28,
+                    backgroundColor: colors.green + "25",
                     alignItems: "center", justifyContent: "center",
                   }}>
-                    <Ionicons name={item.icon as any} size={14} color={colors.primary} />
+                    <Ionicons name="checkmark-circle" size={32} color={colors.green} />
                   </View>
-                  <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{item.label}</Text>
+                  <Text style={{ color: colors.green, fontWeight: "700", fontSize: 17 }}>All done!</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center", lineHeight: 20 }}>
+                    Your application form is filled and your documents are written. Review everything, make any edits, then save.
+                  </Text>
                 </View>
-              ))}
-            </View>
 
-            {/* Submit button */}
-            <TouchableOpacity
-              style={{
-                flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-                backgroundColor: autoFilling ? colors.primary + "99" : colors.primary,
-                borderRadius: 999, padding: 16,
-              }}
-              onPress={runAutoFill}
-              disabled={autoFilling}
-            >
-              {autoFilling ? (
-                <>
-                  <ActivityIndicator color={colors.primaryForeground} size="small" />
-                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Filling form...</Text>
-                </>
-              ) : (
-                <>
+                {/* Summary of what was produced */}
+                {[
+                  { icon: "create-outline", label: "Application form filled", sub: "Company, role, deadline, contact email, notes", color: colors.primary },
+                  { icon: "document-text-outline", label: "Cover letter written", sub: "Tailored to the job description", color: colors.primary },
+                  { icon: "mail-outline", label: "Application email written", sub: "Ready to copy and send", color: colors.primary },
+                  { icon: "person-outline", label: "CV tailoring notes", sub: "Bullet points & keywords for this role", color: colors.primary },
+                ].map((item) => (
+                  <View key={item.label} style={{
+                    flexDirection: "row", alignItems: "center", gap: 12,
+                    backgroundColor: colors.card, borderRadius: 12, padding: 12,
+                    borderWidth: 1, borderColor: colors.border,
+                  }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: item.color + "20", alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name={item.icon as any} size={18} color={item.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 13 }}>{item.label}</Text>
+                      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 1 }}>{item.sub}</Text>
+                    </View>
+                    <Ionicons name="checkmark" size={16} color={colors.green} />
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+                    backgroundColor: colors.primary, borderRadius: 999, padding: 16, marginTop: 4,
+                  }}
+                  onPress={closeAutoFillDone}
+                >
+                  <Ionicons name="eye-outline" size={18} color={colors.primaryForeground} />
+                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Review Documents</Text>
+                </TouchableOpacity>
+              </>
+            ) : autoFilling ? (
+              /* ── IN-PROGRESS STATE ── */
+              <>
+                <View style={{ alignItems: "center", paddingVertical: 24, gap: 20 }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 16 }}>Working on your application...</Text>
+                </View>
+
+                {[
+                  { stage: 1, label: "Fetching job page" },
+                  { stage: 2, label: "Extracting job details" },
+                  { stage: 3, label: "Writing cover letter, email & CV notes" },
+                ].map((step) => {
+                  const done = autoFillStage > step.stage;
+                  const active = autoFillStage === step.stage;
+                  return (
+                    <View key={step.stage} style={{
+                      flexDirection: "row", alignItems: "center", gap: 12,
+                      backgroundColor: colors.card, borderRadius: 12, padding: 14,
+                      borderWidth: 1,
+                      borderColor: done ? colors.green + "50" : active ? colors.primary + "60" : colors.border,
+                    }}>
+                      <View style={{
+                        width: 32, height: 32, borderRadius: 16,
+                        backgroundColor: done ? colors.green + "20" : active ? colors.primary + "20" : colors.border + "40",
+                        alignItems: "center", justifyContent: "center",
+                      }}>
+                        {done
+                          ? <Ionicons name="checkmark" size={16} color={colors.green} />
+                          : active
+                            ? <ActivityIndicator size="small" color={colors.primary} />
+                            : <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: "700" }}>{step.stage}</Text>
+                        }
+                      </View>
+                      <Text style={{
+                        color: done ? colors.green : active ? colors.foreground : colors.textMuted,
+                        fontWeight: active ? "600" : "400", fontSize: 14, flex: 1,
+                      }}>
+                        {step.label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </>
+            ) : (
+              /* ── INPUT STATE ── */
+              <>
+                {/* Mode toggle */}
+                <View style={{ flexDirection: "row", backgroundColor: colors.card, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border }}>
+                  {(["url", "text"] as const).map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      style={{
+                        flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center",
+                        backgroundColor: autoFillMode === m ? colors.primary : "transparent",
+                      }}
+                      onPress={() => { setAutoFillMode(m); setAutoFillInput(""); setAutoFillError(""); }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Ionicons
+                          name={m === "url" ? "link-outline" : "document-text-outline"}
+                          size={14}
+                          color={autoFillMode === m ? colors.primaryForeground : colors.textSecondary}
+                        />
+                        <Text style={{ color: autoFillMode === m ? colors.primaryForeground : colors.textSecondary, fontWeight: "600", fontSize: 13 }}>
+                          {m === "url" ? "Job URL" : "Paste Text"}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Input field */}
+                {autoFillMode === "url" ? (
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Post URL</Text>
+                    <TextInput
+                      style={inputStyle(colors)}
+                      placeholder="https://www.brightermonday.co.ke/jobs/..."
+                      placeholderTextColor={colors.textMuted}
+                      value={autoFillInput}
+                      onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
+                      keyboardType="url"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                ) : (
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Description</Text>
+                    <TextInput
+                      style={[inputStyle(colors), { minHeight: 180, textAlignVertical: "top" }]}
+                      placeholder={"Paste the full job advert here...\n\nInclude title, responsibilities, requirements, deadline and contact details."}
+                      placeholderTextColor={colors.textMuted}
+                      value={autoFillInput}
+                      onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
+                      multiline
+                      numberOfLines={9}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                )}
+
+                {/* Error */}
+                {autoFillError ? (
+                  <View style={{
+                    flexDirection: "row", alignItems: "flex-start", gap: 10,
+                    backgroundColor: colors.destructive + "18", borderRadius: 12,
+                    padding: 12, borderWidth: 1, borderColor: colors.destructive + "44",
+                  }}>
+                    <Ionicons name="alert-circle-outline" size={18} color={colors.destructive} style={{ marginTop: 1 }} />
+                    <Text style={{ color: colors.destructive, fontSize: 13, flex: 1, lineHeight: 19 }}>{autoFillError}</Text>
+                  </View>
+                ) : null}
+
+                {/* What AI will produce */}
+                <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                  <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 13, marginBottom: 2 }}>One tap produces:</Text>
+                  {[
+                    { icon: "create-outline", label: "Form fields filled", sub: "Company, role, deadline, contact email" },
+                    { icon: "document-text-outline", label: "Cover letter", sub: "Tailored to this exact job" },
+                    { icon: "mail-outline", label: "Application email", sub: "Ready to copy and send" },
+                    { icon: "person-outline", label: "CV tailoring notes", sub: "Bullet points & keywords to update your CV" },
+                  ].map((item) => (
+                    <View key={item.label} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: colors.primary + "18", alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name={item.icon as any} size={14} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "500" }}>{item.label}</Text>
+                        <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 1 }}>{item.sub}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Submit button */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+                    backgroundColor: colors.primary, borderRadius: 999, padding: 16,
+                  }}
+                  onPress={runAutoFill}
+                >
                   <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
-                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Auto-Fill Application</Text>
-                </>
-              )}
-            </TouchableOpacity>
+                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Build My Application</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <View style={{ height: 20 }} />
           </ScrollView>
