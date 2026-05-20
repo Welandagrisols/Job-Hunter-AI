@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, Alert, ActivityIndicator, Platform,
-  Share, Linking,
+  Share, Linking, Modal, KeyboardAvoidingView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +11,8 @@ import { db } from "@/src/services/storage";
 import { notificationService } from "@/src/services/notifications";
 import { useColors } from "@/hooks/useColors";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
+import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
+import { urlParser } from "@/src/services/urlParser";
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
 
@@ -45,6 +47,14 @@ export default function AddApplicationScreen() {
   const [applicationEmail, setApplicationEmail] = useState("");
   const [interviewPrep, setInterviewPrep] = useState("");
   const [cvTailoring, setCvTailoring] = useState("");
+
+  // Auto-fill modal state
+  const [autoFillVisible, setAutoFillVisible] = useState(false);
+  const [autoFillMode, setAutoFillMode] = useState<"url" | "text">("url");
+  const [autoFillInput, setAutoFillInput] = useState("");
+  const [autoFilling, setAutoFilling] = useState(false);
+  const [autoFillStep, setAutoFillStep] = useState("");
+  const [autoFillError, setAutoFillError] = useState("");
 
   useEffect(() => {
     if (id) {
@@ -144,6 +154,70 @@ export default function AddApplicationScreen() {
     }
   };
 
+  const runAutoFill = async () => {
+    const input = autoFillInput.trim();
+    if (!input) {
+      setAutoFillError("Please paste a job URL or job description text.");
+      return;
+    }
+
+    const apiKey = await getGeminiApiKey();
+    if (!apiKey) {
+      setAutoFillError("Gemini API key required. Go to Settings → API Keys to add your free key.");
+      return;
+    }
+
+    setAutoFilling(true);
+    setAutoFillError("");
+    setGeminiStatusCallback((msg) => setAutoFillStep(msg));
+
+    try {
+      let jobText = input;
+
+      if (autoFillMode === "url") {
+        setAutoFillStep("Fetching job page...");
+        const parsed = await urlParser.parseFromUrl(input);
+        jobText = parsed.rawText || input;
+        if (parsed.sourceUrl) {
+          setJobUrl(parsed.sourceUrl);
+        }
+      }
+
+      setAutoFillStep("Extracting details with AI...");
+      const filled = await aiService.autoFillApplication(jobText);
+
+      if (filled.company) setCompany(filled.company);
+      if (filled.role) setRole(filled.role);
+      if (filled.deadline) setDeadline(filled.deadline);
+      if (filled.contactEmail) setContactEmail(filled.contactEmail);
+
+      const notesParts: string[] = [];
+      if (filled.location) notesParts.push(`Location: ${filled.location}`);
+      if (filled.salary) notesParts.push(`Salary: ${filled.salary}`);
+      if (filled.jobDescription) notesParts.push(`\n${filled.jobDescription}`);
+      if (filled.notes) notesParts.push(`\nNotes: ${filled.notes}`);
+      if (notesParts.length > 0) setNotes(notesParts.join("\n"));
+
+      if (autoFillMode === "url") setJobUrl(input);
+
+      setAutoFillVisible(false);
+      setAutoFillInput("");
+
+      const fieldsSet = [filled.company, filled.role, filled.deadline, filled.contactEmail].filter(Boolean).length;
+      Alert.alert(
+        "Auto-fill complete",
+        `${fieldsSet} fields filled in from the job posting. Review and save when ready.`,
+        [{ text: "Great!" }]
+      );
+    } catch (err: any) {
+      setAutoFillError(err.message || "Could not extract job details. Try pasting the text instead.");
+    } finally {
+      setGeminiStatusCallback(null);
+      setAutoFilling(false);
+      setAutoFillStep("");
+    }
+  };
+
   const shareDoc = async (content: string, label: string) => {
     try {
       await Share.share({ message: `${label}\n\n${content}` });
@@ -191,6 +265,38 @@ export default function AddApplicationScreen() {
         </Text>
         <View style={{ width: 32 }} />
       </View>
+
+      {/* Auto-Fill Banner (only for new applications) */}
+      {!id && (
+        <TouchableOpacity
+          onPress={() => { setAutoFillVisible(true); setAutoFillError(""); }}
+          style={{
+            flexDirection: "row", alignItems: "center", gap: 10,
+            marginHorizontal: 16, marginBottom: 10, padding: 13,
+            backgroundColor: colors.primary + "18",
+            borderRadius: 14, borderWidth: 1,
+            borderColor: colors.primary + "55",
+          }}
+          activeOpacity={0.8}
+        >
+          <View style={{
+            width: 34, height: 34, borderRadius: 10,
+            backgroundColor: colors.primary + "25",
+            alignItems: "center", justifyContent: "center",
+          }}>
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>
+              Auto-Fill from Job Posting
+            </Text>
+            <Text style={{ color: colors.primary, fontSize: 12, marginTop: 1, opacity: 0.75 }}>
+              Paste a URL or job description — AI fills the form
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+        </TouchableOpacity>
+      )}
 
       {/* Tabs */}
       <View style={{ flexDirection: "row", marginHorizontal: 16, marginBottom: 4, backgroundColor: colors.card, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border }}>
@@ -333,6 +439,188 @@ export default function AddApplicationScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* ─── Auto-Fill Modal ─── */}
+      <Modal
+        visible={autoFillVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAutoFillVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: colors.background }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          {/* Modal header */}
+          <View style={{
+            flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+            paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16,
+            borderBottomWidth: 1, borderBottomColor: colors.border,
+          }}>
+            <TouchableOpacity onPress={() => { setAutoFillVisible(false); setAutoFillInput(""); setAutoFillError(""); }} style={{ padding: 4 }}>
+              <Ionicons name="close" size={24} color={colors.foreground} />
+            </TouchableOpacity>
+            <View style={{ alignItems: "center" }}>
+              <Text style={{ fontSize: 17, fontWeight: "700", color: colors.foreground }}>Auto-Fill</Text>
+              <Text style={{ fontSize: 12, color: colors.primary, marginTop: 1 }}>AI-powered form filling</Text>
+            </View>
+            <View style={{ width: 32 }} />
+          </View>
+
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16 }}>
+
+            {/* Mode toggle */}
+            <View style={{ flexDirection: "row", backgroundColor: colors.card, borderRadius: 10, padding: 3, borderWidth: 1, borderColor: colors.border }}>
+              {(["url", "text"] as const).map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={{
+                    flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center",
+                    backgroundColor: autoFillMode === m ? colors.primary : "transparent",
+                  }}
+                  onPress={() => { setAutoFillMode(m); setAutoFillInput(""); setAutoFillError(""); }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons
+                      name={m === "url" ? "link-outline" : "document-text-outline"}
+                      size={14}
+                      color={autoFillMode === m ? colors.primaryForeground : colors.textSecondary}
+                    />
+                    <Text style={{
+                      color: autoFillMode === m ? colors.primaryForeground : colors.textSecondary,
+                      fontWeight: "600", fontSize: 13,
+                    }}>
+                      {m === "url" ? "Job URL" : "Paste Text"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* How it works hint */}
+            <View style={{
+              flexDirection: "row", alignItems: "flex-start", gap: 10,
+              backgroundColor: colors.primary + "12", borderRadius: 12,
+              padding: 12, borderWidth: 1, borderColor: colors.primary + "30",
+            }}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.primary} style={{ marginTop: 1 }} />
+              <Text style={{ color: colors.primary, fontSize: 13, flex: 1, lineHeight: 19, opacity: 0.9 }}>
+                {autoFillMode === "url"
+                  ? "Paste a job post URL (BrighterMonday, LinkedIn, MyJobMag, etc.) and AI will fetch and extract all details."
+                  : "Paste the full job description text. AI will extract company, role, deadline, contact email, requirements and more."}
+              </Text>
+            </View>
+
+            {/* Input */}
+            {autoFillMode === "url" ? (
+              <View style={{ gap: 6 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Post URL</Text>
+                <TextInput
+                  style={inputStyle(colors)}
+                  placeholder="https://www.brightermonday.co.ke/jobs/..."
+                  placeholderTextColor={colors.textMuted}
+                  value={autoFillInput}
+                  onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            ) : (
+              <View style={{ gap: 6 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: "500" }}>Job Description</Text>
+                <TextInput
+                  style={[inputStyle(colors), { minHeight: 200, textAlignVertical: "top" }]}
+                  placeholder={"Paste the full job advert here...\n\nInclude title, responsibilities, requirements, deadline and any contact details."}
+                  placeholderTextColor={colors.textMuted}
+                  value={autoFillInput}
+                  onChangeText={(v) => { setAutoFillInput(v); setAutoFillError(""); }}
+                  multiline
+                  numberOfLines={10}
+                  textAlignVertical="top"
+                />
+              </View>
+            )}
+
+            {/* Error */}
+            {autoFillError ? (
+              <View style={{
+                flexDirection: "row", alignItems: "flex-start", gap: 10,
+                backgroundColor: colors.destructive + "18", borderRadius: 12,
+                padding: 12, borderWidth: 1, borderColor: colors.destructive + "44",
+              }}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.destructive} style={{ marginTop: 1 }} />
+                <Text style={{ color: colors.destructive, fontSize: 13, flex: 1, lineHeight: 19 }}>{autoFillError}</Text>
+              </View>
+            ) : null}
+
+            {/* Status during processing */}
+            {autoFilling && autoFillStep ? (
+              <View style={{
+                flexDirection: "row", alignItems: "center", gap: 10,
+                backgroundColor: colors.primary + "12", borderRadius: 12, padding: 12,
+              }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: 13 }}>{autoFillStep}</Text>
+              </View>
+            ) : null}
+
+            {/* What gets filled */}
+            <View style={{
+              backgroundColor: colors.card, borderRadius: 14,
+              padding: 14, borderWidth: 1, borderColor: colors.border, gap: 10,
+            }}>
+              <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 13, marginBottom: 2 }}>
+                Fields that will be filled:
+              </Text>
+              {[
+                { icon: "business-outline", label: "Company name" },
+                { icon: "briefcase-outline", label: "Job title / role" },
+                { icon: "calendar-outline", label: "Application deadline" },
+                { icon: "mail-outline", label: "Contact email" },
+                { icon: "location-outline", label: "Location & salary (in notes)" },
+                { icon: "list-outline", label: "Role summary & requirements (in notes)" },
+              ].map((item) => (
+                <View key={item.label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    backgroundColor: colors.primary + "18",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Ionicons name={item.icon as any} size={14} color={colors.primary} />
+                  </View>
+                  <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Submit button */}
+            <TouchableOpacity
+              style={{
+                flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+                backgroundColor: autoFilling ? colors.primary + "99" : colors.primary,
+                borderRadius: 999, padding: 16,
+              }}
+              onPress={runAutoFill}
+              disabled={autoFilling}
+            >
+              {autoFilling ? (
+                <>
+                  <ActivityIndicator color={colors.primaryForeground} size="small" />
+                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Filling form...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="sparkles" size={18} color={colors.primaryForeground} />
+                  <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Auto-Fill Application</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={{ height: 20 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

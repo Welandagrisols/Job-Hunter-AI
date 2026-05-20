@@ -155,6 +155,47 @@ async function callGemini(prompt: string, maxTokens = 800): Promise<string> {
 }
 
 export const aiService = {
+  async autoFillApplication(jobText: string): Promise<{
+    company: string;
+    role: string;
+    deadline: string;
+    contactEmail: string;
+    location: string;
+    salary: string;
+    requirements: string[];
+    jobDescription: string;
+    notes: string;
+  }> {
+    const result = await callGemini(`
+Extract all job application details from the text below. Return ONLY valid JSON, no markdown, no commentary.
+
+JOB TEXT:
+${jobText.slice(0, 5000)}
+
+Return this exact JSON structure (use empty string if not found):
+{
+  "company": "company or organisation name",
+  "role": "exact job title",
+  "deadline": "application deadline date e.g. 2026-08-31 or empty string",
+  "contactEmail": "email to send application to, or empty string",
+  "location": "city/country or remote",
+  "salary": "salary range or empty string",
+  "requirements": ["key requirement 1", "key requirement 2", "key requirement 3"],
+  "jobDescription": "concise 2-3 sentence summary of the role responsibilities",
+  "notes": "any important notes like interview process details, benefits, or instructions"
+}`, 500);
+
+    try {
+      const clean = result.replace(/```json|```/g, "").trim();
+      return JSON.parse(clean);
+    } catch {
+      return {
+        company: "", role: "", deadline: "", contactEmail: "",
+        location: "", salary: "", requirements: [], jobDescription: "", notes: "",
+      };
+    }
+  },
+
   async parseJobDetails(rawText: string): Promise<{
     company: string;
     role: string;
