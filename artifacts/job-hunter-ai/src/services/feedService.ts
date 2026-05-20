@@ -5,6 +5,7 @@ const FEED_CACHE_KEY = "jh_job_feed";
 const SEEN_JOBS_KEY = "jh_seen_jobs";
 const LAST_FETCH_KEY = "jh_last_fetch";
 const SOURCES_KEY = "@jobhunter:feed_sources";
+const KEYWORD_FILTERS_KEY = "@jobhunter:keyword_filters";
 
 const WESLEY_KEYWORDS = [
   "agronomist", "agronomy", "soil", "fertilizer", "fertiliser",
@@ -551,6 +552,40 @@ export const feedService = {
     await AsyncStorage.setItem(SOURCES_KEY, JSON.stringify(DEFAULT_JOB_SOURCES));
   },
 
+  // ── KEYWORD FILTERS ────────────────────────────────────────────────────────
+
+  async getKeywordFilters(): Promise<KeywordFilters> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYWORD_FILTERS_KEY);
+      return raw ? JSON.parse(raw) : { highlights: [], blocks: [] };
+    } catch {
+      return { highlights: [], blocks: [] };
+    }
+  },
+
+  async saveKeywordFilters(filters: KeywordFilters): Promise<void> {
+    await AsyncStorage.setItem(KEYWORD_FILTERS_KEY, JSON.stringify(filters));
+  },
+
+  async addKeyword(word: string, type: "highlight" | "block"): Promise<KeywordFilters> {
+    const filters = await this.getKeywordFilters();
+    const key = type === "highlight" ? "highlights" : "blocks";
+    const clean = word.trim().toLowerCase();
+    if (!filters[key].includes(clean)) {
+      filters[key] = [...filters[key], clean];
+      await this.saveKeywordFilters(filters);
+    }
+    return filters;
+  },
+
+  async removeKeyword(word: string, type: "highlight" | "block"): Promise<KeywordFilters> {
+    const filters = await this.getKeywordFilters();
+    const key = type === "highlight" ? "highlights" : "blocks";
+    filters[key] = filters[key].filter((w) => w !== word.toLowerCase());
+    await this.saveKeywordFilters(filters);
+    return filters;
+  },
+
   // ── FEED FETCHING ──────────────────────────────────────────────────────────
 
   async fetchAllFeeds(onProgress?: (source: string, count: number) => void): Promise<FeedJob[]> {
@@ -657,6 +692,11 @@ export const feedService = {
     await AsyncStorage.multiRemove([FEED_CACHE_KEY, LAST_FETCH_KEY]);
   },
 };
+
+export interface KeywordFilters {
+  highlights: string[];
+  blocks: string[];
+}
 
 export interface JobSource {
   id: string;
