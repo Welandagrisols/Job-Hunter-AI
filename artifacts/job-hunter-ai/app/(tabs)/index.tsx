@@ -63,6 +63,19 @@ export default function DashboardScreen() {
   const recentAlerts = alerts.filter((a) => !a.is_read).slice(0, 3);
   const recentApps = applications.slice(0, 5);
 
+  // Upcoming deadlines — sorted soonest first, exclude far-past (>14 days overdue)
+  const deadlineApps = applications
+    .filter((a) => {
+      if (!a.deadline) return false;
+      const d = new Date(a.deadline);
+      if (isNaN(d.getTime())) return false;
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const daysLeft = Math.ceil((d.getTime() - Date.now()) / msPerDay);
+      return daysLeft > -14;
+    })
+    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
+    .slice(0, 6);
+
   const styles = makeStyles(colors, topPad);
 
   if (loading) {
@@ -167,6 +180,52 @@ export default function DashboardScreen() {
           onPress={() => router.push("/statistics")}
         />
       </View>
+
+      {deadlineApps.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader title="Upcoming Deadlines" onSeeAll={() => router.push("/(tabs)/applications")} colors={colors} />
+          {deadlineApps.map((app) => {
+            const dl = deadlineInfo(app.deadline!, colors);
+            if (!dl) return null;
+            const sc = statusColorFn(app.status, colors);
+            return (
+              <TouchableOpacity
+                key={app.id}
+                style={{
+                  flexDirection: "row", alignItems: "center", gap: 12,
+                  backgroundColor: colors.card, borderRadius: 12, padding: 12,
+                  marginBottom: 8, borderWidth: 1,
+                  borderColor: dl.urgency === "critical" ? dl.color + "55" : colors.border,
+                  borderLeftWidth: 4, borderLeftColor: dl.color,
+                }}
+                onPress={() => router.push({ pathname: "/add-application", params: { id: app.id } })}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.foreground, fontWeight: "600", fontSize: 14 }} numberOfLines={1}>
+                    {app.company}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                    {app.role}
+                  </Text>
+                </View>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <View style={{
+                    flexDirection: "row", alignItems: "center", gap: 4,
+                    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999,
+                    backgroundColor: dl.color + "20", borderWidth: 1, borderColor: dl.color + "50",
+                  }}>
+                    <Ionicons name={dl.icon as any} size={10} color={dl.color} />
+                    <Text style={{ color: dl.color, fontSize: 10, fontWeight: "700" }}>{dl.label}</Text>
+                  </View>
+                  <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: sc + "22" }}>
+                    <Text style={{ color: sc, fontSize: 10, fontWeight: "600" }}>{STATUS_LABELS[app.status]}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {recentAlerts.length > 0 && (
         <View style={styles.section}>
@@ -289,6 +348,22 @@ function SectionHeader({ title, onSeeAll, onAdd, colors }: {
       </View>
     </View>
   );
+}
+
+function deadlineInfo(deadlineStr: string, colors: ReturnType<typeof useColors>) {
+  const deadline = new Date(deadlineStr);
+  if (isNaN(deadline.getTime())) return null;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  deadline.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft < 0) return { label: "Overdue", color: colors.destructive, icon: "alert-circle", urgency: "critical" };
+  if (daysLeft === 0) return { label: "Due today!", color: colors.destructive, icon: "alert-circle", urgency: "critical" };
+  if (daysLeft === 1) return { label: "1 day left", color: colors.destructive, icon: "time-outline", urgency: "critical" };
+  if (daysLeft <= 3) return { label: `${daysLeft} days left`, color: colors.orange, icon: "time-outline", urgency: "high" };
+  if (daysLeft <= 7) return { label: `${daysLeft} days left`, color: colors.orange, icon: "calendar-outline", urgency: "medium" };
+  return { label: `${daysLeft} days left`, color: colors.green, icon: "calendar-outline", urgency: "low" };
 }
 
 function statusColorFn(status: string, colors: ReturnType<typeof useColors>): string {
