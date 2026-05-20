@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Platform,
+  TextInput, Alert, ActivityIndicator, Platform, Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { db } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 import { JobApplication, STATUS_LABELS } from "@/src/types";
+import { aiService as docsService } from "@/src/services/claude";
 
 function getDeadlineInfo(deadlineStr: string, colors: ReturnType<typeof import("@/hooks/useColors").useColors>) {
   const deadline = new Date(deadlineStr);
@@ -58,6 +59,7 @@ export default function ApplicationsScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [followingUpId, setFollowingUpId] = useState<string | null>(null);
 
   const loadApps = useCallback(async () => {
     try {
@@ -104,6 +106,23 @@ export default function ApplicationsScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => { await db.deleteApplication(id); loadApps(); } },
     ]);
+  };
+
+  const handleFollowUp = async (app: JobApplication) => {
+    setFollowingUpId(app.id);
+    try {
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const daysSince = Math.floor((Date.now() - new Date(app.date_applied).getTime()) / msPerDay);
+      const body = await docsService.generateFollowUp(app.company, app.role, daysSince);
+      const to = encodeURIComponent(app.contact_email || "");
+      const subject = encodeURIComponent(`Following Up – ${app.role} Application`);
+      const encodedBody = encodeURIComponent(body);
+      await Linking.openURL(`mailto:${to}?subject=${subject}&body=${encodedBody}`);
+    } catch (err: any) {
+      Alert.alert("Could not generate follow-up", err.message || "Please try again.");
+    } finally {
+      setFollowingUpId(null);
+    }
   };
 
   const statusColor = (status: string) => {
@@ -279,6 +298,31 @@ export default function ApplicationsScreen() {
                     {item.notes}
                   </Text>
                 ) : null}
+                {(() => {
+                  if (item.status !== "applied") return null;
+                  const daysSince = Math.floor((Date.now() - new Date(item.date_applied).getTime()) / (1000 * 60 * 60 * 24));
+                  if (daysSince < 7) return null;
+                  const isLoading = followingUpId === item.id;
+                  return (
+                    <TouchableOpacity
+                      onPress={() => handleFollowUp(item)}
+                      disabled={followingUpId !== null}
+                      style={{
+                        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5,
+                        marginTop: 10, paddingVertical: 7, borderRadius: 8,
+                        backgroundColor: colors.orange + "18",
+                        borderWidth: 1, borderColor: colors.orange + "44",
+                      }}
+                    >
+                      {isLoading
+                        ? <ActivityIndicator size="small" color={colors.orange} />
+                        : <Ionicons name="send-outline" size={12} color={colors.orange} />}
+                      <Text style={{ color: colors.orange, fontSize: 12, fontWeight: "600" }}>
+                        {isLoading ? "Writing follow-up..." : `Follow Up · ${daysSince}d since applied`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })()}
               </View>
             </TouchableOpacity>
           );
