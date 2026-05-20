@@ -7,6 +7,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "@/src/services/storage";
 import { notificationService } from "@/src/services/notifications";
 import { useColors } from "@/hooks/useColors";
@@ -14,6 +15,8 @@ import { JobApplication, STATUS_LABELS } from "@/src/types";
 import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
 import { aiService as docsService } from "@/src/services/claude";
 import { urlParser } from "@/src/services/urlParser";
+
+type CustomQ = { id: string; q: string; a: string };
 
 const STATUS_OPTIONS: JobApplication["status"][] = ["applied", "interview", "offer", "rejected", "withdrawn", "waiting"];
 
@@ -49,6 +52,9 @@ export default function AddApplicationScreen() {
   const [interviewPrep, setInterviewPrep] = useState("");
   const [cvTailoring, setCvTailoring] = useState("");
   const [generatingPrep, setGeneratingPrep] = useState(false);
+  const [customQuestions, setCustomQuestions] = useState<CustomQ[]>([]);
+  const [newQuestion, setNewQuestion] = useState("");
+  const [answeringId, setAnsweringId] = useState<string | null>(null);
 
   // Auto-fill modal state
   const [autoFillVisible, setAutoFillVisible] = useState(false);
@@ -88,6 +94,49 @@ export default function AddApplicationScreen() {
       });
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    AsyncStorage.getItem(`@jobhunter:custom_questions_${id}`)
+      .then((raw) => { if (raw) setCustomQuestions(JSON.parse(raw)); })
+      .catch(() => {});
+  }, [id]);
+
+  const saveCustomQuestions = async (qs: CustomQ[]) => {
+    if (!id) return;
+    await AsyncStorage.setItem(`@jobhunter:custom_questions_${id}`, JSON.stringify(qs)).catch(() => {});
+  };
+
+  const addCustomQuestion = () => {
+    const q = newQuestion.trim();
+    if (!q) return;
+    const updated = [...customQuestions, { id: Date.now().toString(), q, a: "" }];
+    setCustomQuestions(updated);
+    saveCustomQuestions(updated);
+    setNewQuestion("");
+  };
+
+  const removeCustomQuestion = (qid: string) => {
+    const updated = customQuestions.filter((cq) => cq.id !== qid);
+    setCustomQuestions(updated);
+    saveCustomQuestions(updated);
+  };
+
+  const getAiAnswer = async (qid: string) => {
+    const cq = customQuestions.find((q) => q.id === qid);
+    if (!cq) return;
+    setAnsweringId(qid);
+    try {
+      const answer = await docsService.answerApplicationQuestion(cq.q, company, role);
+      const updated = customQuestions.map((q) => q.id === qid ? { ...q, a: answer } : q);
+      setCustomQuestions(updated);
+      saveCustomQuestions(updated);
+    } catch (err: any) {
+      Alert.alert("Could not get answer", err.message || "Please try again.");
+    } finally {
+      setAnsweringId(null);
+    }
+  };
 
   const statusColor = (s: string) => {
     const map: Record<string, string> = {
@@ -663,6 +712,98 @@ export default function AddApplicationScreen() {
                 <Text style={{ color: colors.primaryForeground, fontWeight: "700", fontSize: 15 }}>Generate Interview Prep</Text>
               </TouchableOpacity>
             </>
+          )}
+
+          {/* ── My Questions — always shown ── */}
+          {!generatingPrep && (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              {/* Section header */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: colors.primary + "18", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="pencil-outline" size={14} color={colors.primary} />
+                </View>
+                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 15 }}>My Questions</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 12 }}>— type your own, get AI answers</Text>
+              </View>
+
+              {/* Existing custom questions */}
+              {customQuestions.map((cq) => {
+                const isAnswering = answeringId === cq.id;
+                return (
+                  <View key={cq.id} style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, overflow: "hidden" }}>
+                    {/* Question row */}
+                    <View style={{ flexDirection: "row", alignItems: "flex-start", padding: 12, gap: 8 }}>
+                      <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.primary + "18", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                        <Text style={{ color: colors.primary, fontSize: 11, fontWeight: "700" }}>Q</Text>
+                      </View>
+                      <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "600", lineHeight: 20 }}>{cq.q}</Text>
+                      <TouchableOpacity onPress={() => removeCustomQuestion(cq.id)} style={{ padding: 4 }}>
+                        <Ionicons name="close-circle-outline" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Answer — shown if exists */}
+                    {cq.a ? (
+                      <View style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 6 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <View style={{ width: 22, height: 22, borderRadius: 6, backgroundColor: colors.green + "18", alignItems: "center", justifyContent: "center" }}>
+                            <Text style={{ color: colors.green, fontSize: 11, fontWeight: "700" }}>A</Text>
+                          </View>
+                          <Text style={{ color: colors.green, fontSize: 11, fontWeight: "600" }}>Suggested Answer</Text>
+                        </View>
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20, paddingLeft: 28 }}>{cq.a}</Text>
+                      </View>
+                    ) : (
+                      /* Get AI Answer button */
+                      <TouchableOpacity
+                        onPress={() => getAiAnswer(cq.id)}
+                        disabled={answeringId !== null}
+                        style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 10, margin: 10, marginTop: 0, borderRadius: 8, backgroundColor: colors.primary + "12", borderWidth: 1, borderColor: colors.primary + "30" }}
+                      >
+                        {isAnswering
+                          ? <ActivityIndicator size="small" color={colors.primary} />
+                          : <Ionicons name="sparkles" size={13} color={colors.primary} />}
+                        <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>
+                          {isAnswering ? "Getting AI answer..." : "Get AI Answer"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+
+              {/* Add new question input */}
+              <View style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 10 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: "500" }}>Add a question you want to prepare for:</Text>
+                <TextInput
+                  style={{
+                    backgroundColor: colors.background, borderRadius: 10, padding: 12,
+                    color: colors.foreground, fontSize: 13, borderWidth: 1,
+                    borderColor: colors.border, minHeight: 60, textAlignVertical: "top",
+                  }}
+                  placeholder={"e.g. How do you handle pressure from farmers when recommendations don't work immediately?"}
+                  placeholderTextColor={colors.textMuted}
+                  value={newQuestion}
+                  onChangeText={setNewQuestion}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <TouchableOpacity
+                  onPress={addCustomQuestion}
+                  disabled={!newQuestion.trim()}
+                  style={{
+                    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                    padding: 12, borderRadius: 999,
+                    backgroundColor: newQuestion.trim() ? colors.primary : colors.border,
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color={newQuestion.trim() ? colors.primaryForeground : colors.textMuted} />
+                  <Text style={{ color: newQuestion.trim() ? colors.primaryForeground : colors.textMuted, fontWeight: "600", fontSize: 13 }}>
+                    Add Question
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </ScrollView>
       )}
