@@ -28,7 +28,24 @@ function getDeadlineInfo(deadlineStr: string, colors: ReturnType<typeof import("
   return { label: `${daysLeft} days left`, color: colors.green, icon: "calendar-outline" as const };
 }
 
-const STATUS_FILTERS = ["all", "applied", "interview", "offer", "rejected", "waiting", "withdrawn"];
+const STATUS_FILTERS = ["all", "this_week", "applied", "interview", "offer", "rejected", "waiting", "withdrawn"];
+
+function isThisWeek(app: JobApplication): boolean {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const week = new Date(now);
+  week.setDate(week.getDate() + 7);
+
+  if (app.deadline) {
+    const d = new Date(app.deadline);
+    if (!isNaN(d.getTime()) && d >= now && d <= week) return true;
+  }
+  if (app.interview_date) {
+    const d = new Date(app.interview_date);
+    if (!isNaN(d.getTime()) && d >= now && d <= week) return true;
+  }
+  return false;
+}
 
 export default function ApplicationsScreen() {
   const colors = useColors();
@@ -58,7 +75,11 @@ export default function ApplicationsScreen() {
 
   const applyFilters = (apps: JobApplication[], q: string, status: string) => {
     let result = apps;
-    if (status !== "all") result = result.filter((a) => a.status === status);
+    if (status === "this_week") {
+      result = result.filter(isThisWeek);
+    } else if (status !== "all") {
+      result = result.filter((a) => a.status === status);
+    }
     if (q) {
       const lower = q.toLowerCase();
       result = result.filter((a) =>
@@ -169,8 +190,17 @@ export default function ApplicationsScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: "center" }}
         keyExtractor={(item) => item}
         renderItem={({ item }) => {
-          const color = item === "all" ? colors.primary : statusColor(item);
+          const color = item === "all"
+            ? colors.primary
+            : item === "this_week"
+              ? colors.green
+              : statusColor(item);
           const active = statusFilter === item;
+          const label = item === "all"
+            ? "All"
+            : item === "this_week"
+              ? "⚡ This Week"
+              : STATUS_LABELS[item];
           return (
             <TouchableOpacity
               style={{
@@ -181,7 +211,7 @@ export default function ApplicationsScreen() {
               onPress={() => handleStatusFilter(item)}
             >
               <Text style={{ color: active ? color : colors.textSecondary, fontSize: 13, fontWeight: active ? "600" : "400" }}>
-                {item === "all" ? "All" : STATUS_LABELS[item]}
+                {label}
               </Text>
             </TouchableOpacity>
           );
