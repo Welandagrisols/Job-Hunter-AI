@@ -151,6 +151,18 @@ export default function FeedScreen() {
     });
   };
 
+  const tailorCVForJob = (job: FeedJob) => {
+    router.push({
+      pathname: "/cv-tailor",
+      params: {
+        jobTitle: job.title,
+        jobCompany: job.source,
+        jobDescription: job.description || "",
+        jobUrl: job.url,
+      },
+    });
+  };
+
   const addKeyword = async () => {
     const word = newKeyword.trim();
     if (!word) return;
@@ -416,6 +428,7 @@ export default function FeedScreen() {
               onOpen={() => openJob(item)}
               onCapture={() => captureJob(item)}
               onWrite={() => writeForJob(item)}
+              onTailorCV={() => tailorCVForJob(item)}
             />
           )}
         />
@@ -424,13 +437,14 @@ export default function FeedScreen() {
   );
 }
 
-function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrite }: {
+function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrite, onTailorCV }: {
   job: FeedJob;
   highlighted: boolean;
   matchedHighlight: string;
   onOpen: () => void;
   onCapture: () => void;
   onWrite: () => void;
+  onTailorCV: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -512,6 +526,19 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrit
             <View style={{ flex: 1 }}>
               <Text style={styles.actionMenuTitle}>Write with AI</Text>
               <Text style={styles.actionMenuSub}>Cover letter, CV tailor, interview prep & more</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
+          </TouchableOpacity>
+
+          <View style={styles.actionMenuDivider} />
+
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onTailorCV(); }}>
+            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.gold + "22" }]}>
+              <Ionicons name="document-text-outline" size={16} color={theme.colors.accent.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionMenuTitle}>Tailor CV</Text>
+              <Text style={styles.actionMenuSub}>Keyword gap analysis + tailored bullet points</Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
           </TouchableOpacity>
