@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { feedService, FeedJob, JobSource, KeywordFilters } from "@/src/services/feedService";
+import { db } from "@/src/services/storage";
 import { theme } from "@/src/theme";
 import { formatDistanceToNow } from "date-fns";
 
@@ -161,6 +162,38 @@ export default function FeedScreen() {
         jobUrl: job.url,
       },
     });
+  };
+
+  const quickTrackJob = async (job: FeedJob) => {
+    try {
+      // Guard: don't duplicate
+      const existing = await db.getApplications();
+      const dupe = existing.find(
+        (a) => a.job_url === job.url ||
+          (a.role.toLowerCase() === job.title.toLowerCase() && a.company.toLowerCase() === job.source.toLowerCase())
+      );
+      if (dupe) {
+        Alert.alert("Already tracked", `"${job.title}" is already in your Kanban board.`, [
+          { text: "View Board", onPress: () => router.push("/(tabs)/kanban") },
+          { text: "OK", style: "cancel" },
+        ]);
+        return;
+      }
+      await db.addApplication({
+        role: job.title,
+        company: job.source,
+        job_url: job.url,
+        status: "applied",
+        date_applied: new Date().toISOString(),
+        source: job.source,
+      });
+      Alert.alert("✓ Added to tracker", `"${job.title}" is now on your Kanban board.`, [
+        { text: "View Board", onPress: () => router.push("/(tabs)/kanban") },
+        { text: "Done", style: "cancel" },
+      ]);
+    } catch {
+      Alert.alert("Error", "Could not save this application. Please try again.");
+    }
   };
 
   const addKeyword = async () => {
@@ -429,6 +462,7 @@ export default function FeedScreen() {
               onCapture={() => captureJob(item)}
               onWrite={() => writeForJob(item)}
               onTailorCV={() => tailorCVForJob(item)}
+              onQuickTrack={() => quickTrackJob(item)}
             />
           )}
         />
@@ -437,7 +471,7 @@ export default function FeedScreen() {
   );
 }
 
-function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrite, onTailorCV }: {
+function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrite, onTailorCV, onQuickTrack }: {
   job: FeedJob;
   highlighted: boolean;
   matchedHighlight: string;
@@ -445,6 +479,7 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrit
   onCapture: () => void;
   onWrite: () => void;
   onTailorCV: () => void;
+  onQuickTrack: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -545,9 +580,22 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrit
 
           <View style={styles.actionMenuDivider} />
 
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onCapture(); }}>
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onQuickTrack(); }}>
             <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.green + "22" }]}>
-              <Ionicons name="scan-outline" size={16} color={theme.colors.accent.green} />
+              <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.accent.green} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionMenuTitle}>Quick Track</Text>
+              <Text style={styles.actionMenuSub}>Mark applied now — instantly adds to your Kanban board</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
+          </TouchableOpacity>
+
+          <View style={styles.actionMenuDivider} />
+
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onCapture(); }}>
+            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.cyan + "22" }]}>
+              <Ionicons name="scan-outline" size={16} color={theme.colors.accent.cyan} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.actionMenuTitle}>Extract & Track</Text>

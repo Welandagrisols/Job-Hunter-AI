@@ -45,12 +45,56 @@ export default function CVTailorScreen() {
   const [editMode, setEditMode] = useState(false);
   const [editedTailoring, setEditedTailoring] = useState("");
   const [copiedSection, setCopiedSection] = useState<"keywords" | "tailoring" | null>(null);
+  const [tracked, setTracked] = useState(false);
+  const [trackedAppId, setTrackedAppId] = useState<string | null>(null);
+  const [tracking, setTracking] = useState(false);
+
+  const jobUrl = params.jobUrl || "";
 
   useEffect(() => {
     db.getCVVault().then((v: CVVault) => {
       setHasCv(!!(v.cvText && v.cvText.length > 50));
     });
+    // Check if already tracked by URL or role+company combo
+    if (jobUrl || (jobTitle && jobCompany)) {
+      db.getApplications().then((apps) => {
+        const match = apps.find((a) =>
+          (jobUrl && a.job_url === jobUrl) ||
+          (a.role.toLowerCase() === jobTitle.toLowerCase() && jobCompany && a.company.toLowerCase() === jobCompany.toLowerCase())
+        );
+        if (match) {
+          setTracked(true);
+          setTrackedAppId(match.id);
+        }
+      });
+    }
   }, []);
+
+  const markApplied = async () => {
+    if (tracked || tracking) return;
+    setTracking(true);
+    try {
+      const cvContent = editMode ? editedTailoring : tailoring;
+      const newApp = await db.addApplication({
+        role: jobTitle,
+        company: jobCompany || "Unknown",
+        job_url: jobUrl || undefined,
+        status: "applied",
+        date_applied: new Date().toISOString(),
+        source: jobCompany || undefined,
+        cv_tailoring: cvContent || undefined,
+        notes: keywords
+          ? `CV Match: ${keywords.percentage}% · Matched: ${keywords.matched.slice(0, 5).join(", ")}${keywords.missing.length > 0 ? ` · Missing: ${keywords.missing.slice(0, 3).join(", ")}` : ""}`
+          : undefined,
+      });
+      setTracked(true);
+      setTrackedAppId(newApp.id);
+    } catch {
+      Alert.alert("Could not save", "Something went wrong saving this application. Please try again.");
+    } finally {
+      setTracking(false);
+    }
+  };
 
   const runAnalysis = useCallback(async () => {
     if (!jobDescription) {
@@ -142,14 +186,50 @@ export default function CVTailorScreen() {
           </View>
         )}
 
+        {/* Already tracked banner */}
+        {tracked && (
+          <TouchableOpacity
+            style={styles.trackedBanner}
+            onPress={() => router.push("/(tabs)/kanban")}
+            activeOpacity={0.8}
+          >
+            <View style={styles.trackedBannerLeft}>
+              <Ionicons name="checkmark-circle" size={20} color={theme.colors.accent.green} />
+              <View>
+                <Text style={styles.trackedBannerTitle}>Added to Kanban Tracker</Text>
+                <Text style={styles.trackedBannerSub}>Tap to open the board and see your pipeline</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.accent.green} />
+          </TouchableOpacity>
+        )}
+
         {/* Analyse button */}
         {phase === "idle" || phase === "error" ? (
-          <TouchableOpacity style={styles.analyseBtn} onPress={runAnalysis} activeOpacity={0.8}>
-            <Ionicons name="sparkles-outline" size={18} color={theme.colors.text.inverse} />
-            <Text style={styles.analyseBtnText}>
-              {phase === "error" ? "Retry Analysis" : "Analyse My CV Against This Role"}
-            </Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.analyseBtn} onPress={runAnalysis} activeOpacity={0.8}>
+              <Ionicons name="sparkles-outline" size={18} color={theme.colors.text.inverse} />
+              <Text style={styles.analyseBtnText}>
+                {phase === "error" ? "Retry Analysis" : "Analyse My CV Against This Role"}
+              </Text>
+            </TouchableOpacity>
+
+            {!tracked && (
+              <TouchableOpacity
+                style={styles.quickTrackBtn}
+                onPress={markApplied}
+                disabled={tracking}
+                activeOpacity={0.8}
+              >
+                {tracking
+                  ? <ActivityIndicator size="small" color={theme.colors.accent.green} />
+                  : <Ionicons name="checkmark-circle-outline" size={17} color={theme.colors.accent.green} />}
+                <Text style={styles.quickTrackBtnText}>
+                  {tracking ? "Saving..." : "Mark as Applied (skip analysis)"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         ) : phase === "loading" ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={theme.colors.accent.cyan} size="large" />
@@ -276,7 +356,41 @@ export default function CVTailorScreen() {
               )}
             </View>
 
-            {/* Action buttons */}
+            {/* Mark as Applied — big CTA */}
+            {!tracked ? (
+              <TouchableOpacity
+                style={[styles.markAppliedBtn, tracking && { opacity: 0.7 }]}
+                onPress={markApplied}
+                disabled={tracking}
+                activeOpacity={0.8}
+              >
+                {tracking
+                  ? <ActivityIndicator size="small" color={theme.colors.text.inverse} />
+                  : <Ionicons name="checkmark-circle-outline" size={20} color={theme.colors.text.inverse} />}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.markAppliedTitle}>
+                    {tracking ? "Saving to tracker..." : "Mark as Applied"}
+                  </Text>
+                  <Text style={styles.markAppliedSub}>
+                    Adds to Kanban board with today's date, CV match score & tailoring suggestions
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.trackedBannerInline}
+                onPress={() => router.push("/(tabs)/kanban")}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={20} color={theme.colors.accent.green} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.trackedInlineTitle}>Tracked ✓  View in Kanban →</Text>
+                  <Text style={styles.trackedInlineSub}>CV tailoring suggestions saved to the application record</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Secondary action buttons */}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { flex: 1, backgroundColor: theme.colors.accent.cyan }]}
@@ -434,6 +548,42 @@ const styles = StyleSheet.create({
     padding: 12, borderWidth: 1, borderColor: theme.colors.accent.cyan + "44",
     minHeight: 200,
   },
+
+  trackedBanner: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: theme.colors.accent.green + "14",
+    borderRadius: 12, padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: theme.colors.accent.green + "44",
+  },
+  trackedBannerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  trackedBannerTitle: { color: theme.colors.accent.green, fontWeight: "700", fontSize: 14 },
+  trackedBannerSub: { color: theme.colors.text.secondary, fontSize: 11, marginTop: 2 },
+
+  quickTrackBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: theme.colors.accent.green + "14",
+    borderRadius: 12, paddingVertical: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: theme.colors.accent.green + "44",
+  },
+  quickTrackBtnText: { color: theme.colors.accent.green, fontWeight: "600", fontSize: 14 },
+
+  markAppliedBtn: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: theme.colors.accent.green,
+    borderRadius: 14, paddingVertical: 16, paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  markAppliedTitle: { color: theme.colors.text.inverse, fontWeight: "700", fontSize: 15 },
+  markAppliedSub: { color: theme.colors.text.inverse + "CC", fontSize: 11, marginTop: 2, lineHeight: 14 },
+
+  trackedBannerInline: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: theme.colors.accent.green + "14",
+    borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16,
+    marginBottom: 12, borderWidth: 1, borderColor: theme.colors.accent.green + "44",
+  },
+  trackedInlineTitle: { color: theme.colors.accent.green, fontWeight: "700", fontSize: 14 },
+  trackedInlineSub: { color: theme.colors.text.secondary, fontSize: 11, marginTop: 2 },
 
   actionRow: { flexDirection: "row", gap: 10, marginBottom: 8 },
   actionBtn: {
