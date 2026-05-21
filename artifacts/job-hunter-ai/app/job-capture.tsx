@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Alert, Clipboard,
+  TouchableOpacity, ActivityIndicator, Alert,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router";
 import { urlParser, ParsedJob } from "@/src/services/urlParser";
 import { db } from "@/src/services/storage";
 import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
@@ -416,7 +417,7 @@ function GeneratedContent({ title, content }: { title: string; content: string }
       <View style={styles.generatedHeader}>
         <Text style={styles.generatedTitle}>{title}</Text>
         <TouchableOpacity onPress={() => {
-          Clipboard.setString(content);
+          Clipboard.setStringAsync(content);
           Alert.alert("Copied!", "Content copied to clipboard.");
         }}>
           <Ionicons name="copy-outline" size={18} color={theme.colors.accent.cyan} />

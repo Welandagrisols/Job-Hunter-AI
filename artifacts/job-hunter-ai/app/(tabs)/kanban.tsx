@@ -4,7 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router";
 import { useRouter } from "expo-router";
 import { db, JobApplication } from "@/src/services/storage";
 import { notificationService } from "@/src/services/notifications";

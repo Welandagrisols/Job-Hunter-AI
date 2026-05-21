@@ -5,7 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router";
 import { db, UserProfile, DEFAULT_USER_PROFILE } from "@/src/services/storage";
 import { useColors } from "@/hooks/useColors";
 
