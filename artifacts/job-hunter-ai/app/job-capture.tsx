@@ -10,10 +10,12 @@ import { useFocusEffect } from "expo-router";
 import { urlParser, ParsedJob } from "@/src/services/urlParser";
 import { db } from "@/src/services/storage";
 import { aiService, getGeminiApiKey, setGeminiStatusCallback } from "@/src/services/gemini";
+import { aiService as docsService } from "@/src/services/claude";
 import { notificationService } from "@/src/services/notifications";
 import { theme } from "@/src/theme";
 
 type InputMode = "url" | "text";
+type MatchResult = { score: number; percentage: number; matched: string[]; missing: string[]; recommendation: string };
 
 export default function JobCaptureScreen() {
   const router = useRouter();
@@ -32,6 +34,9 @@ export default function JobCaptureScreen() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [analyzingMatch, setAnalyzingMatch] = useState(false);
+  const [matchExpanded, setMatchExpanded] = useState(true);
 
   useFocusEffect(useCallback(() => {
     getGeminiApiKey().then(k => setHasApiKey(!!k));
@@ -74,12 +79,28 @@ export default function JobCaptureScreen() {
         : await urlParser.parseFromText(input);
       setLoadingStep("Parsing with AI...");
       setParsed(result);
+      setMatchResult(null);
+      // Kick off CV match analysis in the background — non-blocking
+      runMatchAnalysis(result.rawText);
     } catch (err: any) {
       setParseError(err.message || "Could not extract job details. Try switching to 'Paste Text'.");
     } finally {
       setGeminiStatusCallback(null);
       setLoading(false);
       setLoadingStep("");
+    }
+  };
+
+  const runMatchAnalysis = async (jobText: string) => {
+    if (!jobText) return;
+    setAnalyzingMatch(true);
+    try {
+      const result = await docsService.analyzeKeywords(jobText);
+      setMatchResult(result);
+    } catch {
+      // Silent fail — match analysis is a bonus, not critical
+    } finally {
+      setAnalyzingMatch(false);
     }
   };
 
@@ -295,6 +316,114 @@ export default function JobCaptureScreen() {
             </View>
           </View>
 
+          {/* ── CV Match Card ── */}
+          {(analyzingMatch || matchResult) && (
+            <View style={[styles.matchCard, matchResult && {
+              borderColor:
+                matchResult.percentage >= 70 ? theme.colors.accent.green + "55" :
+                matchResult.percentage >= 40 ? theme.colors.accent.orange + "55" :
+                theme.colors.accent.red + "55",
+            }]}>
+              <TouchableOpacity
+                style={styles.matchHeader}
+                onPress={() => setMatchExpanded(v => !v)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.matchTitleRow}>
+                  <Ionicons name="analytics-outline" size={16} color={
+                    !matchResult ? theme.colors.text.muted :
+                    matchResult.percentage >= 70 ? theme.colors.accent.green :
+                    matchResult.percentage >= 40 ? theme.colors.accent.orange :
+                    theme.colors.accent.red
+                  } />
+                  <Text style={styles.matchTitle}>CV Match Analysis</Text>
+                  {analyzingMatch && <ActivityIndicator size="small" color={theme.colors.accent.cyan} style={{ marginLeft: 6 }} />}
+                </View>
+                {matchResult && (
+                  <View style={[styles.matchScoreBadge, {
+                    backgroundColor:
+                      matchResult.percentage >= 70 ? theme.colors.accent.green + "22" :
+                      matchResult.percentage >= 40 ? theme.colors.accent.orange + "22" :
+                      theme.colors.accent.red + "22",
+                  }]}>
+                    <Text style={[styles.matchScoreText, {
+                      color:
+                        matchResult.percentage >= 70 ? theme.colors.accent.green :
+                        matchResult.percentage >= 40 ? theme.colors.accent.orange :
+                        theme.colors.accent.red,
+                    }]}>{matchResult.percentage}%</Text>
+                  </View>
+                )}
+                {matchResult && (
+                  <Ionicons
+                    name={matchExpanded ? "chevron-up" : "chevron-down"}
+                    size={14} color={theme.colors.text.muted}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {analyzingMatch && !matchResult && (
+                <Text style={styles.matchAnalyzing}>Comparing your CV against this role...</Text>
+              )}
+
+              {matchResult && matchExpanded && (
+                <View style={styles.matchBody}>
+                  {/* Score bar */}
+                  <View style={styles.matchBarBg}>
+                    <View style={[styles.matchBarFill, {
+                      width: `${matchResult.percentage}%` as any,
+                      backgroundColor:
+                        matchResult.percentage >= 70 ? theme.colors.accent.green :
+                        matchResult.percentage >= 40 ? theme.colors.accent.orange :
+                        theme.colors.accent.red,
+                    }]} />
+                  </View>
+                  <Text style={styles.matchBarLabel}>
+                    {matchResult.score} of {matchResult.score + matchResult.missing.length} key skills matched
+                  </Text>
+
+                  {/* Matched keywords */}
+                  {matchResult.matched.length > 0 && (
+                    <View style={styles.matchSection}>
+                      <Text style={styles.matchSectionLabel}>✓ You have these</Text>
+                      <View style={styles.matchPillRow}>
+                        {matchResult.matched.map((kw) => (
+                          <View key={kw} style={styles.matchedPill}>
+                            <Text style={styles.matchedPillText}>{kw}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Missing keywords */}
+                  {matchResult.missing.length > 0 && (
+                    <View style={styles.matchSection}>
+                      <Text style={[styles.matchSectionLabel, { color: theme.colors.accent.orange }]}>
+                        ⚠ Gaps to address in your cover letter
+                      </Text>
+                      <View style={styles.matchPillRow}>
+                        {matchResult.missing.map((kw) => (
+                          <View key={kw} style={styles.missingPill}>
+                            <Text style={styles.missingPillText}>{kw}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Recommendation */}
+                  {matchResult.recommendation && (
+                    <View style={styles.matchRec}>
+                      <Ionicons name="bulb-outline" size={14} color={theme.colors.accent.gold} />
+                      <Text style={styles.matchRecText}>{matchResult.recommendation}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
           {parsed.requirements.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Requirements</Text>
@@ -484,4 +613,56 @@ const styles = StyleSheet.create({
   aiSuiteBtn: { flexDirection: "row", alignItems: "center", gap: theme.spacing.md, backgroundColor: theme.colors.accent.cyan, borderRadius: theme.radius.lg, padding: theme.spacing.md },
   aiSuiteBtnTitle: { color: theme.colors.bg.primary, fontWeight: theme.font.weights.bold, fontSize: theme.font.sizes.md },
   aiSuiteBtnSub: { color: theme.colors.bg.primary + "cc", fontSize: theme.font.sizes.xs, marginTop: 2 },
+
+  // CV Match card
+  matchCard: {
+    backgroundColor: theme.colors.bg.card, borderRadius: theme.radius.lg,
+    borderWidth: 1, borderColor: theme.colors.bg.border, overflow: "hidden",
+  },
+  matchHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    padding: theme.spacing.md,
+  },
+  matchTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  matchTitle: { color: theme.colors.text.primary, fontWeight: "700", fontSize: 14 },
+  matchAnalyzing: {
+    color: theme.colors.text.muted, fontSize: 12, fontStyle: "italic",
+    paddingHorizontal: theme.spacing.md, paddingBottom: theme.spacing.md,
+  },
+  matchScoreBadge: {
+    borderRadius: 100, paddingHorizontal: 10, paddingVertical: 3,
+  },
+  matchScoreText: { fontWeight: "800", fontSize: 15 },
+  matchBody: { paddingHorizontal: theme.spacing.md, paddingBottom: theme.spacing.md, gap: 12 },
+  matchBarBg: {
+    height: 6, backgroundColor: theme.colors.bg.elevated,
+    borderRadius: 3, overflow: "hidden",
+  },
+  matchBarFill: { height: 6, borderRadius: 3 },
+  matchBarLabel: { color: theme.colors.text.muted, fontSize: 11, marginTop: -4 },
+  matchSection: { gap: 6 },
+  matchSectionLabel: {
+    color: theme.colors.accent.green, fontSize: 11,
+    fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5,
+  },
+  matchPillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  matchedPill: {
+    backgroundColor: theme.colors.accent.green + "18",
+    borderWidth: 1, borderColor: theme.colors.accent.green + "44",
+    borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  matchedPillText: { color: theme.colors.accent.green, fontSize: 11, fontWeight: "600" },
+  missingPill: {
+    backgroundColor: theme.colors.accent.orange + "15",
+    borderWidth: 1, borderColor: theme.colors.accent.orange + "44",
+    borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  missingPillText: { color: theme.colors.accent.orange, fontSize: 11, fontWeight: "600" },
+  matchRec: {
+    flexDirection: "row", alignItems: "flex-start", gap: 7,
+    backgroundColor: theme.colors.accent.gold + "12",
+    borderRadius: 10, padding: 10,
+    borderWidth: 1, borderColor: theme.colors.accent.gold + "33",
+  },
+  matchRecText: { flex: 1, color: theme.colors.text.secondary, fontSize: 12, lineHeight: 17 },
 });

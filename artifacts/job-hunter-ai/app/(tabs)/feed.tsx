@@ -434,6 +434,7 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onPrep
   onPrep: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [scoreExpanded, setScoreExpanded] = useState(false);
 
   const scoreColor =
     job.relevanceScore >= 70 ? theme.colors.accent.green :
@@ -482,12 +483,19 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onPrep
       </TouchableOpacity>
 
       <View style={styles.cardFooter}>
-        <View style={[styles.scoreBadge, { backgroundColor: scoreColor + "22", borderColor: scoreColor + "55" }]}>
+        <TouchableOpacity
+          style={[styles.scoreBadge, { backgroundColor: scoreColor + "22", borderColor: scoreColor + "55" }]}
+          onPress={() => setScoreExpanded(s => !s)}
+          activeOpacity={0.7}
+        >
           <View style={[styles.scoreDot, { backgroundColor: scoreColor }]} />
           <Text style={[styles.scoreText, { color: scoreColor }]}>
             {job.relevanceScore}% · {scoreLabel}
           </Text>
-        </View>
+          {job.relevanceReason ? (
+            <Ionicons name={scoreExpanded ? "chevron-up" : "chevron-down"} size={10} color={scoreColor} />
+          ) : null}
+        </TouchableOpacity>
 
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.applyBtn} onPress={() => setExpanded((e) => !e)}>
@@ -500,9 +508,18 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onPrep
         </View>
       </View>
 
-      {job.relevanceReason ? (
-        <Text style={styles.relevanceReason}>🎯 {job.relevanceReason}</Text>
-      ) : null}
+      {scoreExpanded && job.relevanceReason && (
+        <View style={styles.matchKeywords}>
+          <Text style={styles.matchKeywordsLabel}>Matched skills:</Text>
+          <View style={styles.matchKeywordPills}>
+            {job.relevanceReason.split(",").map(kw => kw.trim()).filter(Boolean).map(kw => (
+              <View key={kw} style={[styles.matchKeywordPill, { borderColor: scoreColor + "55", backgroundColor: scoreColor + "15" }]}>
+                <Text style={[styles.matchKeywordPillText, { color: scoreColor }]}>{kw}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {expanded && (
         <View style={styles.actionMenu}>
@@ -725,6 +742,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.elevated, borderRadius: theme.radius.full,
   },
   relevanceReason: { color: theme.colors.text.muted, fontSize: theme.font.sizes.xs, marginTop: theme.spacing.xs, fontStyle: "italic" },
+  matchKeywords: {
+    marginTop: theme.spacing.xs, paddingTop: theme.spacing.xs,
+    borderTopWidth: 1, borderTopColor: theme.colors.bg.border,
+  },
+  matchKeywordsLabel: {
+    color: theme.colors.text.muted, fontSize: 10,
+    fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5,
+  },
+  matchKeywordPills: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
+  matchKeywordPill: {
+    borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1,
+  },
+  matchKeywordPillText: { fontSize: 10, fontWeight: "600" },
   actionMenu: {
     marginTop: theme.spacing.sm, backgroundColor: theme.colors.bg.elevated,
     borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.bg.border, overflow: "hidden",
