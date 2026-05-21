@@ -8,7 +8,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { feedService, FeedJob, JobSource, KeywordFilters } from "@/src/services/feedService";
-import { db } from "@/src/services/storage";
 import { theme } from "@/src/theme";
 import { formatDistanceToNow } from "date-fns";
 
@@ -141,18 +140,7 @@ export default function FeedScreen() {
     router.push({ pathname: "/job-capture", params: { prefillUrl: job.url } });
   };
 
-  const writeForJob = (job: FeedJob) => {
-    router.push({
-      pathname: "/(tabs)/ai-writer",
-      params: {
-        prefill_role: job.title,
-        prefill_company: job.source,
-        prefill_description: job.description || "",
-      },
-    });
-  };
-
-  const tailorCVForJob = (job: FeedJob) => {
+  const prepForJob = (job: FeedJob) => {
     router.push({
       pathname: "/cv-tailor",
       params: {
@@ -162,38 +150,6 @@ export default function FeedScreen() {
         jobUrl: job.url,
       },
     });
-  };
-
-  const quickTrackJob = async (job: FeedJob) => {
-    try {
-      // Guard: don't duplicate
-      const existing = await db.getApplications();
-      const dupe = existing.find(
-        (a) => a.job_url === job.url ||
-          (a.role.toLowerCase() === job.title.toLowerCase() && a.company.toLowerCase() === job.source.toLowerCase())
-      );
-      if (dupe) {
-        Alert.alert("Already tracked", `"${job.title}" is already in your Kanban board.`, [
-          { text: "View Board", onPress: () => router.push("/(tabs)/kanban") },
-          { text: "OK", style: "cancel" },
-        ]);
-        return;
-      }
-      await db.addApplication({
-        role: job.title,
-        company: job.source,
-        job_url: job.url,
-        status: "applied",
-        date_applied: new Date().toISOString(),
-        source: job.source,
-      });
-      Alert.alert("✓ Added to tracker", `"${job.title}" is now on your Kanban board.`, [
-        { text: "View Board", onPress: () => router.push("/(tabs)/kanban") },
-        { text: "Done", style: "cancel" },
-      ]);
-    } catch {
-      Alert.alert("Error", "Could not save this application. Please try again.");
-    }
   };
 
   const addKeyword = async () => {
@@ -460,9 +416,7 @@ export default function FeedScreen() {
               matchedHighlight={(item as any).matchedHighlight}
               onOpen={() => openJob(item)}
               onCapture={() => captureJob(item)}
-              onWrite={() => writeForJob(item)}
-              onTailorCV={() => tailorCVForJob(item)}
-              onQuickTrack={() => quickTrackJob(item)}
+              onPrep={() => prepForJob(item)}
             />
           )}
         />
@@ -471,15 +425,13 @@ export default function FeedScreen() {
   );
 }
 
-function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrite, onTailorCV, onQuickTrack }: {
+function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onPrep }: {
   job: FeedJob;
   highlighted: boolean;
   matchedHighlight: string;
   onOpen: () => void;
   onCapture: () => void;
-  onWrite: () => void;
-  onTailorCV: () => void;
-  onQuickTrack: () => void;
+  onPrep: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -554,39 +506,13 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrit
 
       {expanded && (
         <View style={styles.actionMenu}>
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onWrite(); }}>
-            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.cyan + "22" }]}>
-              <Ionicons name="sparkles-outline" size={16} color={theme.colors.accent.cyan} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionMenuTitle}>Write with AI</Text>
-              <Text style={styles.actionMenuSub}>Cover letter, CV tailor, interview prep & more</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
-          </TouchableOpacity>
-
-          <View style={styles.actionMenuDivider} />
-
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onTailorCV(); }}>
+          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onPrep(); }}>
             <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.gold + "22" }]}>
-              <Ionicons name="document-text-outline" size={16} color={theme.colors.accent.gold} />
+              <Ionicons name="sparkles-outline" size={16} color={theme.colors.accent.gold} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.actionMenuTitle}>Tailor CV</Text>
-              <Text style={styles.actionMenuSub}>Keyword gap analysis + tailored bullet points</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
-          </TouchableOpacity>
-
-          <View style={styles.actionMenuDivider} />
-
-          <TouchableOpacity style={styles.actionMenuItem} onPress={() => { setExpanded(false); onQuickTrack(); }}>
-            <View style={[styles.actionMenuIcon, { backgroundColor: theme.colors.accent.green + "22" }]}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={theme.colors.accent.green} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionMenuTitle}>Quick Track</Text>
-              <Text style={styles.actionMenuSub}>Mark applied now — instantly adds to your Kanban board</Text>
+              <Text style={styles.actionMenuTitle}>Prep for this role</Text>
+              <Text style={styles.actionMenuSub}>Cover letter · CV tailor · email · interview prep</Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
           </TouchableOpacity>
@@ -599,7 +525,7 @@ function JobCard({ job, highlighted, matchedHighlight, onOpen, onCapture, onWrit
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.actionMenuTitle}>Extract & Track</Text>
-              <Text style={styles.actionMenuSub}>Pull full JD details, save to job tracker</Text>
+              <Text style={styles.actionMenuSub}>Pull full JD and save to your Kanban tracker</Text>
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.colors.text.muted} />
           </TouchableOpacity>
